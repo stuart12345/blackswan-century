@@ -471,6 +471,16 @@ var AudioSys = {
     try {
       if (this.ctx.state === 'suspended' && this.ctx.resume) this.ctx.resume();
     } catch (e) { /* 忽略 */ }
+    // iOS 保险：部分版本仅 resume 不够，需在手势内播放静音缓冲才能解锁输出
+    try {
+      if (this.ctx.state !== 'running') {
+        var ub = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+        var us = this.ctx.createBufferSource();
+        us.buffer = ub;
+        us.connect(this.ctx.destination);
+        us.start(0);
+      }
+    } catch (e2) { /* 忽略 */ }
     // 资产 BGM 优先；文件缺失/解码失败由 playAsset 内部回退程序化
     this._loadAssets();
     var self = this, A = this.Asset;

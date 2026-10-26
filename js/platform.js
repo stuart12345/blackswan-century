@@ -60,6 +60,25 @@ Platform.init = function () {
     canvas.addEventListener('mousedown', function (e) { self2.onTouch && self2.onTouch.start(e.offsetX, e.offsetY); });
     canvas.addEventListener('mousemove', function (e) { if (e.buttons) self2.onTouch && self2.onTouch.move(e.offsetX, e.offsetY); });
     canvas.addEventListener('mouseup', function (e) { self2.onTouch && self2.onTouch.end(e.offsetX, e.offsetY); });
+    // 原生触摸：手机上必须由真手势解锁音频（模拟鼠标事件不算手势），拖动列表也靠它
+    canvas.addEventListener('touchstart', function (e) {
+      e.preventDefault();
+      var t = e.touches[0];
+      var r = canvas.getBoundingClientRect();
+      self2.onTouch && self2.onTouch.start(t.clientX - r.left, t.clientY - r.top);
+    }, { passive: false });
+    canvas.addEventListener('touchmove', function (e) {
+      e.preventDefault();
+      var t = e.touches[0];
+      var r = canvas.getBoundingClientRect();
+      self2.onTouch && self2.onTouch.move(t.clientX - r.left, t.clientY - r.top);
+    }, { passive: false });
+    canvas.addEventListener('touchend', function (e) {
+      e.preventDefault();
+      var t = e.changedTouches[0];
+      var r = canvas.getBoundingClientRect();
+      self2.onTouch && self2.onTouch.end(t.clientX - r.left, t.clientY - r.top);
+    }, { passive: false });
     // 滚轮：桌面端列表滚动（passive:false 以阻止页面连带滚动）
     canvas.addEventListener('wheel', function (e) {
       e.preventDefault();
