@@ -202,6 +202,40 @@ Core.pushFeed = function (s, item) {
   if (s.feed.length > 40) s.feed.splice(0, s.feed.length - 40);
 };
 
+// 风声预告：黑天鹅落地前 2 周的一条模糊线报。不剧透事件本身，只给方向与板块，
+// 让玩家能在消息条上看到"气氛不对"，自己想清楚要不要减仓——这才是"早就知道"的来源。
+var PRE_WARN_DOWN = [
+  '几位老经纪人在俱乐部角落压低声音：「有些账，撑不到明年了。」',
+  '交易所的门房说，最近深夜还有人在楼上会议室吵架。',
+  '跑单员听见有人一口气问了三家银行同一个问题：「还能撑几周？」',
+  '电报室的线报：西边有笔大钱在悄悄换成现金。'
+];
+var PRE_WARN_UP = [
+  '有笔来路不明的大钱在悄悄吃货，量还不小。',
+  '码头茶馆里传：南边有人把厂房抵押了，全押进市场。',
+  '记账的说，最近新开的户头多得不正常。',
+  '经纪行老板亲自给几个大客户打了电话，语气很轻快。'
+];
+
+Core._preWarn = function (s, ch, ev) {
+  var neg = 0, pos = 0, sector = '', i, sc, mag, st0;
+  if (ev.shocks) for (i = 0; i < ev.shocks.length; i++) {
+    sc = ev.shocks[i];
+    mag = (sc.pct instanceof Array) ? (sc.pct[0] + sc.pct[1]) / 2 : sc.pct;
+    if (mag < 0) {
+      neg += -mag;
+      if (!sector && sc.id !== 'all' && sc.id !== '*') {
+        st0 = Core.stock(ch, sc.id);
+        if (st0) sector = st0.sector;
+      }
+    } else pos += mag;
+  }
+  var pool = neg >= pos ? PRE_WARN_DOWN : PRE_WARN_UP;
+  var line = pool[Math.floor(Math.random() * pool.length)];
+  if (neg >= pos && sector) line += '（风声指向' + sector + '）';
+  Core.pushFeed(s, { src: 'insider', text: '【风声】' + line });
+};
+
 // 登记一条带预判的消息（到期后结算应验/落空，计入来源战绩）
 Core.registerClaim = function (s, item) {
   var c = item.claim;
@@ -237,6 +271,19 @@ Core.tickWeek = function (s) {
 
   // 1) 事件与消息
   var shocks = {}, shocksFull = {}, driftsNew = [], ev = null, evIdx, j;
+
+  // 0.5) 风声预告：纸面黑天鹅落地前 2 周先放风（不剧透，只给"有人嗅到了"）
+  //      目的：让"我早就知道要崩"变成玩家自己读出来的功劳，而不是纯运气
+  for (evIdx = 0; evIdx < s.events.length; evIdx++) {
+    var pev = s.events[evIdx];
+    if (pev.preWarned || !pev.ev || !pev.ev.paper) continue;
+    if (pev.w - s.week === 2) {
+      pev.preWarned = true;
+      Core._preWarn(s, ch, pev.ev);
+      s.autoPaused = true;
+    }
+  }
+
   for (evIdx = 0; evIdx < s.events.length; evIdx++) {
     if (s.events[evIdx].w === s.week) { ev = s.events[evIdx].ev; break; }
   }
@@ -448,6 +495,12 @@ Core.tickWeek = function (s) {
   }
   if (s.century && s.century.relics.compd) s.cash *= 1.002;
   s.loan *= (1 + ch.loanRate * ((s.century && s.century.relics.cheap) ? 0.5 : 1));
+  // 时代规则·通胀侵蚀：现金放着也会变少（c5 滞胀），逼迫玩家把钱换成资产
+  if (ch.rule && ch.rule.cashTax && s.cash > 0) {
+    var cashBurn = s.cash * ch.rule.cashTax;
+    s.cash -= cashBurn;
+    s.stats.cashBurn = (s.stats.cashBurn || 0) + cashBurn;
+  }
 
   // 4) 空头单仓强平（浮亏达保证金 80%）
   var slist = instruments(ch);
@@ -630,7 +683,8 @@ Core.sell = function (s, id, frac) {
 };
 
 Core.short = function (s, id, frac) {
-  var st = Core.stock(chapterById(s.ch), id);
+  var chS = chapterById(s.ch);
+  var st = Core.stock(chS, id);
   if (!st) return null;
   var p = s.prices[id], V = s.cash * frac;
   if (V < 1) return null;
@@ -639,7 +693,9 @@ Core.short = function (s, id, frac) {
   if (!T) s.shorts[id] = T = { shares: 0, entry: 0, margin: 0 };
   T.entry = (T.entry * T.shares + p * ns) / (T.shares + ns);
   T.shares += ns;
-  T.margin += V * ((s.century && s.century.relics.short7) ? 0.7 : 1);   // 信物：空头保证金 -30%
+  // 保证金：信物 short7 -30%；时代规则 shortMargin 再乘（c9 雷曼 = 0.5，押注崩盘更便宜）
+  var smul = (chS && chS.rule && chS.rule.shortMargin != null) ? chS.rule.shortMargin : 1;
+  T.margin += V * ((s.century && s.century.relics.short7) ? 0.7 : 1) * smul;
   s.cash -= V;
   s.stats.trades++;
   (s.tradesLog = s.tradesLog || []).push({ w: s.week, type: 'short', id: id, price: p, shares: ns });
@@ -667,7 +723,9 @@ Core.cover = function (s, id, frac) {
 };
 
 Core.borrow = function (s, amt) {
-  var cap = (Core.netWorth(s) - s.loan) * ((s.century && s.century.relics.gambit) ? 1.25 : 1);
+  var chB = chapterById(s.ch);
+  var capM = (chB && chB.rule && chB.rule.borrowCap != null) ? chB.rule.borrowCap : 1;   // 时代规则·信贷松紧
+  var cap = (Core.netWorth(s) - s.loan) * ((s.century && s.century.relics.gambit) ? 1.25 : 1) * capM;
   amt = Math.min(amt, Math.max(0, cap));
   if (amt < 1) return null;
   s.stats.loanEver = 1;
@@ -865,6 +923,7 @@ Core._cSetup = function (s, idx, carry) {
   s.century.warns = warns;
   Core.ensureFields(s);
   Core.pushFeed(s, { src: 'narrator', text: ch.intro });   // 时代开场旁白
+  if (ch.ruleNote) Core.pushFeed(s, { src: 'narrator', text: '时代规则 · ' + ch.ruleNote });
   // 跨时代里程碑：进入新纪元发一笔时代津贴（首段无）
   if (idx > 0) {
     var sub = Math.max(50, Math.min(300, Math.round(carry * 0.02)));

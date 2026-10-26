@@ -850,5 +850,15 @@ var AudioSys = {
   }
 };
 
+// 离线分发（单文件版）：构建脚本会在本文件之前注入 G.BS_EMBED_BGM（base64 data URI）。
+// 此时只保留这一首内置曲——否则相对路径 audio/*.mp3 在 file:// 下必然 404，
+// 而 switchTrack 切到空曲目会让玩家以为音乐坏了。
+if (typeof G.BS_EMBED_BGM === 'string' && G.BS_EMBED_BGM) {
+  AudioSys.Asset.tracks = [{ id: 'bgm_embed', name: '内置曲', file: G.BS_EMBED_BGM }];
+  AudioSys.Asset.trackIdx = 0;
+  var _savedTrack = Platform.getSetting('bs_track');
+  if (_savedTrack) Platform.setSetting('bs_track', '0');   // 清掉旧的多曲目下标，免得越界
+}
+
 G.AudioSys = AudioSys;
 })(typeof GameGlobal !== 'undefined' ? GameGlobal : (typeof window !== 'undefined' ? window : globalThis));

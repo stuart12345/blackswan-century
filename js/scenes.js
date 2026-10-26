@@ -560,7 +560,7 @@ var SelectScene = {
         y += 42;
         continue;
       }
-      UI.roundRect(ctx, 24, y, W - 48, 124, 10, C.panel, C.border);
+      UI.roundRect(ctx, 24, y, W - 48, 148, 10, C.panel, C.border);
       UI.text(ctx, '第 ' + (i + 1) + ' 章 · ' + ch.era, 38, y + 20, { size: 10.5, color: C.gold, bold: true });
       UI.text(ctx, ch.name, 38, y + 42, { size: 15.5, color: C.text, bold: true });
       var starTxt = '';
@@ -568,17 +568,20 @@ var SelectScene = {
       UI.text(ctx, starTxt, W - 38, y + 24, { size: 14, color: C.gold, align: 'right' });
       if (best) UI.text(ctx, '最佳 $' + fmt(best), W - 38, y + 42, { size: 9, color: C.sub, align: 'right' });
       UI.textFit(ctx, ch.intro, 38, y + 62, W - 76, { size: 9.5, color: C.sub });
+      // 时代规则：有特殊规则的章节显示规则，其余显示常规融资成本，版式统一不跳
+      var rNote = ch.ruleNote || ('时代规则：常规 · 融资成本 ' + (ch.loanRate * 100).toFixed(2) + '%/周');
+      UI.textFit(ctx, '◆ ' + rNote, 38, y + 84, W - 76, { size: 9.5, color: C.gold });
       // 点卡片空白处看完整简介
-      this.introRects.push({ ch: ch, x: 24, y: y, w: W - 48, h: 84 });
-      var startBtn = UI.button(38, y + 84, 108, 30, hasRun ? '▶ 继续' : '▶ 开始', { bg: '#0e7490', size: 11.5 });
+      this.introRects.push({ ch: ch, x: 24, y: y, w: W - 48, h: 100 });
+      var startBtn = UI.button(38, y + 108, 108, 30, hasRun ? '▶ 继续' : '▶ 开始', { bg: '#0e7490', size: 11.5 });
       startBtn.onTap = (function (c, r) { return function () { self.startChapter(c, r); }; })(ch, hasRun);
       startBtn.draw(ctx); Scenes.buttons.push(startBtn);
       if (hasRun) {
-        var reBtn = UI.button(156, y + 84, 84, 30, '重开', { bg: C.panel2, color: C.sub, size: 11 });
+        var reBtn = UI.button(156, y + 108, 84, 30, '重开', { bg: C.panel2, color: C.sub, size: 11 });
         reBtn.onTap = (function (c) { return function () { self.startChapter(c, false); }; })(ch);
         reBtn.draw(ctx); Scenes.buttons.push(reBtn);
       }
-      y += 132;
+      y += 156;
     }
     ctx.restore();
 
