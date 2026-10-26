@@ -105,6 +105,12 @@ Core.todayKey = function () {
   var d = new Date();
   return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
 };
+// 每日挑战固定章节：按日期在 11 章间轮转，同一天全球同一章同一盘
+Core.dailyChapter = function () {
+  var d = new Date();
+  var ymd = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+  return D.chapters[ymd % D.chapters.length].id;
+};
 
 Core.newRun = function (chapterId, seed, daily) {
   var ch = chapterById(chapterId);
@@ -824,11 +830,12 @@ Core.recordSettle = function (s) {
   var m = data.meta;
   var out = { ach: [], codex: [] };
   var isC = !!s.century;                    // 百年孤旅：只解锁图鉴，不污染章节星标/纪录
+  var isD = !!s.daily;                      // 每日挑战：同理，成绩只进 m.daily，不写章节星级
   var prev = isC ? 0 : (m.stars[s.ch] || 0);
-  if (!isC && s.result && s.result.stars > prev) m.stars[s.ch] = s.result.stars;
+  if (!isC && !isD && s.result && s.result.stars > prev) m.stars[s.ch] = s.result.stars;
   var best = m.best[s.ch] || 0;
   var fin = s.result ? s.result.nw : Core.netWorth(s);
-  if (!isC && fin > best) m.best[s.ch] = Math.round(fin);
+  if (!isC && !isD && fin > best) m.best[s.ch] = Math.round(fin);
 
   // 图鉴：亲历过的脚本黑天鹅（id 命中 codex 表即解锁）
   for (var i = 0; i < s.stats.swans.length; i++) {
@@ -997,5 +1004,6 @@ Core._centuryRecord = function (s) {
 Core.isUnlocked = function (meta, chapterId) {
   return true;   // 全章节默认解锁（原按通关星数串行解锁，保留函数以备恢复）
 };
+Core.chapterById = chapterById;
 
 })(typeof GameGlobal !== 'undefined' ? GameGlobal : (typeof window !== 'undefined' ? window : globalThis));

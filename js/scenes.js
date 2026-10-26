@@ -111,6 +111,8 @@ var Scenes = {
   _volBtnStart: 0,
   go: function (scene) { this.current = scene; if (scene.enter) scene.enter(); },
   update: function (dt) {
+    // 界面放不下时不推进游戏时间（手机横屏 / 桌面拖窗过矮 / 分屏），避免"看不见却在流逝"
+    if (Platform.tooShort) return;
     if (this.mockAd) {
       this.mockAd.t -= dt;
       if (this.mockAd.t <= 0) {
@@ -123,10 +125,22 @@ var Scenes = {
   },
   renderFrame: function (ctx) {
     this.buttons = [];
+    if (Platform.tooShort) { this.renderTooShort(ctx); return; }
     if (this.current && this.current.render) this.current.render(ctx);
     if (this.mockAd) this.renderMockAd(ctx);
     this._volBtnStart = this.buttons.length;
     if (this.volOpen) renderVolPanel(ctx);
+  },
+  // 兜底提示层：手机横屏或窗口过矮时，主界面用固定锚点布局会挤成一团
+  renderTooShort: function (ctx) {
+    var W = Platform.W, H = Platform.H;
+    ctx.fillStyle = C.bg1;
+    ctx.fillRect(0, 0, W, H);
+    var cy = H / 2;
+    UI.text(ctx, '↻', W / 2, cy - 46, { size: 52, color: C.gold, align: 'center', bold: true });
+    UI.text(ctx, '请把手机竖过来', W / 2, cy + 26, { size: 17, color: C.text, align: 'center', bold: true });
+    UI.textFit(ctx, '横屏时版面放不下（电脑上请把浏览器窗口拉高一些）', W / 2, cy + 52, W - 40,
+      { size: 11.5, color: C.sub, align: 'center' });
   },
   startMockAd: function (onReward, onClose) {
     this.mockAd = { t: 3000, onReward: onReward, onClose: onClose };
@@ -336,7 +350,7 @@ function renderVolPanel(ctx) {
       b.draw(ctx); Scenes.buttons.push(b);
       UI.text(ctx, (on ? '▶ ' : '') + (ix + 1) + '. ' + tr.name, px + 28, ry + 16,
         { size: 11.5, color: on ? C.gold : C.sub, bold: on });
-      if (on) UI.text(ctx, '播放中', px + pw - 28, ry + 16, { size: 9.5, color: C.gold, align: 'right' });
+      if (on) UI.text(ctx, '播放中', px + pw - 28, ry + 16, { size: 10.5, color: C.gold, align: 'right' });
     })(A.Asset.tracks[t], t);
   }
   VOL.trackRows = [];
@@ -427,6 +441,7 @@ var SelectScene = {
   codexScroll: 0,
   introShow: null,
   introRects: null,
+  dailyOpen: false,
   scrollY: 0,
   _dragY: null,
 
@@ -436,6 +451,7 @@ var SelectScene = {
     this.run = (all.run && all.run.phase === 'play') ? all.run : null;
     this.helpOpen = false;
     this.codexOpen = false;
+    this.dailyOpen = false;
     this.scrollY = 0;
     this.codexScroll = 0;
     if (G.AudioSys && G.AudioSys.playAsset) G.AudioSys.playAsset('menu');
@@ -479,7 +495,8 @@ var SelectScene = {
   _contentH: function () {
     var h = 0;
     for (var i = 0; i < D.chapters.length; i++) {
-      h += Core.isUnlocked(this.meta, D.chapters[i].id) ? 132 : 42;
+      // 步进必须与 render 里的 y += 156 / y += 42 一致，否则滚动范围算少，末尾章节滚不到
+      h += Core.isUnlocked(this.meta, D.chapters[i].id) ? 156 : 42;
     }
     return h;
   },
@@ -495,6 +512,14 @@ var SelectScene = {
     if (!Core.loadAll().meta.tutDone && G.state.ch === 'c1' && G.state._tut === undefined) {
       G.state._tut = 0;
     }
+    Scenes.go(GameScene);
+  },
+
+  // 每日挑战：同一天全球同一章、同一 seed；一局定音，无复活
+  startDaily: function () {
+    var chId = Core.dailyChapter();
+    G.state = Core.newRun(chId, Core.dailySeed(), true);
+    this.dailyOpen = false;
     Scenes.go(GameScene);
   },
 
@@ -519,26 +544,29 @@ var SelectScene = {
     if (this.helpOpen) { this.renderHelp(ctx); return; }
     if (this.codexOpen) { this.renderCodex(ctx); return; }
 
-    // 固定入口行：百年孤旅 / 图鉴·成就 / 说明
-    var cw3 = (W - 48 - 24) / 3;
-    var centBtn = UI.button(24, 142, cw3, 32, '百年孤旅', { bg: '#4c1d95', size: 12 });
+    // 固定入口行：每日挑战 / 百年孤旅 / 图鉴·成就 / 说明（四列；窄屏靠 UI.button 自动缩字）
+    var cw4 = (W - 48 - 30) / 4;
+    var dailyBtn = UI.button(24, 142, cw4, 32, '每日挑战', { bg: '#fbbf24', color: '#2b1c00', size: 12 });
+    dailyBtn.onTap = function () { self.dailyOpen = true; };
+    dailyBtn.draw(ctx); Scenes.buttons.push(dailyBtn);
+    var centBtn = UI.button(24 + (cw4 + 10), 142, cw4, 32, '百年孤旅', { bg: '#4c1d95', size: 12 });
     centBtn.onTap = function () {
       G.state = Core.startCentury();
       Scenes.go(GameScene);
     };
     centBtn.draw(ctx); Scenes.buttons.push(centBtn);
-    var codexBtn = UI.button(24 + cw3 + 12, 142, cw3, 32, '图鉴·成就',
+    var codexBtn = UI.button(24 + (cw4 + 10) * 2, 142, cw4, 32, '图鉴·成就',
       { bg: '#312e5f', size: 12 });
     codexBtn.onTap = function () { self.codexOpen = true; self.codexTab = 'swan'; self.codexSel = null; };
     codexBtn.draw(ctx); Scenes.buttons.push(codexBtn);
-    var helpB2 = UI.button(24 + (cw3 + 12) * 2, 142, cw3, 32, '玩法说明',
+    var helpB2 = UI.button(24 + (cw4 + 10) * 3, 142, cw4, 32, '玩法说明',
       { bg: C.panel2, color: C.sub, size: 12 });
     helpB2.onTap = function () { self.helpOpen = true; };
     helpB2.draw(ctx); Scenes.buttons.push(helpB2);
     var cb = this.meta.centuryBest;
     var dTxt = cb ? ('百年纪录：最远 ' + (cb.done ? '2026 终点' : '第 ' + cb.deep + ' 段') +
       (cb.done ? ' · 终点 $' + cb.nw : '')) : '一条命穿越 1926–2026，破产即终结';
-    UI.textFit(ctx, dTxt, W / 2, 188, W - 48, { size: 9.5, color: C.dim, align: 'center' });
+    UI.textFit(ctx, dTxt, W / 2, 188, W - 48, { size: 10.5, color: C.dim, align: 'center' });
 
     // —— 可滚动章节列表 ——
     ctx.save();
@@ -566,11 +594,11 @@ var SelectScene = {
       var starTxt = '';
       for (var k2 = 0; k2 < 3; k2++) starTxt += k2 < stars ? '★' : '☆';
       UI.text(ctx, starTxt, W - 38, y + 24, { size: 14, color: C.gold, align: 'right' });
-      if (best) UI.text(ctx, '最佳 $' + fmt(best), W - 38, y + 42, { size: 9, color: C.sub, align: 'right' });
-      UI.textFit(ctx, ch.intro, 38, y + 62, W - 76, { size: 9.5, color: C.sub });
+      if (best) UI.text(ctx, '最佳 $' + fmt(best), W - 38, y + 42, { size: 10, color: C.sub, align: 'right' });
+      UI.textFit(ctx, ch.intro, 38, y + 62, W - 76, { size: 10.5, color: C.sub });
       // 时代规则：有特殊规则的章节显示规则，其余显示常规融资成本，版式统一不跳
       var rNote = ch.ruleNote || ('时代规则：常规 · 融资成本 ' + (ch.loanRate * 100).toFixed(2) + '%/周');
-      UI.textFit(ctx, '◆ ' + rNote, 38, y + 84, W - 76, { size: 9.5, color: C.gold });
+      UI.textFit(ctx, '◆ ' + rNote, 38, y + 84, W - 76, { size: 10.5, color: C.gold });
       // 点卡片空白处看完整简介
       this.introRects.push({ ch: ch, x: 24, y: y, w: W - 48, h: 100 });
       var startBtn = UI.button(38, y + 108, 108, 30, hasRun ? '▶ 继续' : '▶ 开始', { bg: '#0e7490', size: 11.5 });
@@ -600,6 +628,45 @@ var SelectScene = {
       iok.draw(ctx); Scenes.buttons.push(iok);
     }
 
+    // 每日挑战弹层（同一天全球同一盘；一局定音，无复活）
+    if (this.dailyOpen) {
+      Scenes.buttons.length = 0;              // 丢弃底层章节按钮，避免点穿遮罩
+      ctx.fillStyle = C.backdropHeavy;
+      ctx.fillRect(0, 0, W, H);
+      var dchId = Core.dailyChapter();
+      var dch = Core.chapterById(dchId);
+      var dIdx = 0, dc2;
+      for (dc2 = 0; dc2 < D.chapters.length; dc2++) {
+        if (D.chapters[dc2].id === dchId) { dIdx = dc2; break; }
+      }
+      var md = this.meta.daily;
+      var mdToday = !!(md && md.k === Core.todayKey());
+      var pw2 = Math.min(W - 48, 336), px2 = (W - pw2) / 2, ph2 = 286;
+      var py2 = Math.max(64, H / 2 - ph2 / 2);
+      UI.roundRect(ctx, px2, py2, pw2, ph2, 14, C.panel, C.gold);
+      UI.text(ctx, '每日挑战', W / 2, py2 + 34, { size: 18, color: C.gold, align: 'center', bold: true });
+      UI.text(ctx, '今日一盘 · 全球同一盘 · 一局定音', W / 2, py2 + 58,
+        { size: 10.5, color: C.dim, align: 'center' });
+      UI.roundRect(ctx, px2 + 24, py2 + 74, pw2 - 48, 1, 0.5, C.border);
+      UI.text(ctx, '第 ' + (dIdx + 1) + ' 章 · ' + dch.era, W / 2, py2 + 98,
+        { size: 11.5, color: C.sub, align: 'center' });
+      UI.textFit(ctx, dch.name, W / 2, py2 + 122, pw2 - 40,
+        { size: 15, color: C.text, align: 'center', bold: true });
+      UI.text(ctx, '目标 $' + fmt(dch.goals.s2) + ' · 无复活机会', W / 2, py2 + 150,
+        { size: 11.5, color: C.sub, align: 'center' });
+      UI.text(ctx, mdToday ? ('今日最佳 $' + fmt(md.nw)) : '今日还未挑战',
+        W / 2, py2 + 176, { size: 12.5, color: mdToday ? C.gold : C.dim, align: 'center', bold: mdToday });
+      if (this.run) UI.text(ctx, '开启新局会覆盖进行中的进度', W / 2, py2 + 200,
+        { size: 10, color: C.dim, align: 'center' });
+      var dgo = UI.button(px2 + 24, py2 + 220, pw2 - 48, 42, '开始挑战', { bg: '#b45309', size: 14 });
+      dgo.onTap = function () { self.startDaily(); };
+      dgo.draw(ctx); Scenes.buttons.push(dgo);
+      var dcl = UI.button(px2 + pw2 - 36, py2 + 10, 26, 26, '✕', { bg: C.panel2, color: C.sub, size: 12 });
+      dcl.onTap = function () { self.dailyOpen = false; };
+      dcl.draw(ctx); Scenes.buttons.push(dcl);
+      return;
+    }
+
     // 滚动条指示
     var contentH = this._contentH();
     var viewH = H - 202 - 44;
@@ -610,9 +677,9 @@ var SelectScene = {
     }
 
     UI.text(ctx, '本游戏为虚构历史模拟，不构成任何投资建议', W / 2, H - 30,
-      { size: 9.5, color: C.dim, align: 'center' });
+      { size: 10.5, color: C.dim, align: 'center' });
     UI.text(ctx, '音乐：theojt · John Bartmann · Scott Joplin（公有领域录音）', W / 2, H - 14,
-      { size: 9, color: C.dim, align: 'center' });
+      { size: 10, color: C.dim, align: 'center' });
   },
 
   renderHelp: function (ctx) {
@@ -695,7 +762,7 @@ var SelectScene = {
         if (y > 80 && y < H - 40) {
           UI.roundRect(ctx, 24, y, W - 48, 28, 8, got ? C.panel : 'rgba(0,0,0,0.18)', got ? C.border : null);
           UI.text(ctx, (got ? '★ ' : '☆ ') + ac.name, 38, y + 18, { size: 11.5, color: got ? C.gold : C.dim, bold: true });
-          UI.textFit(ctx, ac.desc, W - 150, y + 18, W - 192, { size: 9.5, color: C.sub, align: 'right' });
+          UI.textFit(ctx, ac.desc, W - 150, y + 18, W - 192, { size: 10.5, color: C.sub, align: 'right' });
         }
         y += 32;
       }
@@ -866,9 +933,9 @@ var GameScene = {
       var rl = 0;
       for (var rk in s.century.relics) rl++;
       UI.textFit(ctx, '百年' + (s.century.idx + 1) + '/11 · 目标$' + s.century.target +
-        ' · 信物' + rl, 16, 44, 210, { size: 9, color: C.purple, bold: true });
+        ' · 信物' + rl, 16, 44, 210, { size: 10, color: C.purple, bold: true });
     } else {
-      UI.text(ctx, '第 ' + (s.week + 1) + ' / ' + ch.weeks + ' 周', 16, 44, { size: 9.5, color: C.dim });
+      UI.text(ctx, '第 ' + (s.week + 1) + ' / ' + ch.weeks + ' 周', 16, 44, { size: 10.5, color: C.dim });
     }
 
     var spLabels = ['⏸', '▶', '▶▶'];
@@ -920,7 +987,7 @@ var GameScene = {
         var bigBtn = UI.button(12, chartY - 6, W - 24, chartH + 12, '', {});
         bigBtn.onTap = function () { s.modal = { type: 'bigchart', id: selfBC.sel, len: 64 }; };
         Scenes.buttons.push(bigBtn);   // 不 draw，透明热区
-        UI.text(ctx, '点看大图 ▣', W - 30, chartY + 14, { size: 9.5, color: C.dim, align: 'right' });
+        UI.text(ctx, '点看大图 ▣', W - 30, chartY + 14, { size: 10.5, color: C.dim, align: 'right' });
       }
       UI.roundRect(ctx, 12, chartY - 6, W - 24, chartH + 12, 10, C.panel, C.border);
       var cx0 = 20, cw0 = W - 76, chg, name;
@@ -932,9 +999,9 @@ var GameScene = {
         UI.text(ctx, hist[hist.length - 1].toFixed(1) + '  ' + pctStr(chg), cx0 + 6 + 120, chartY + 14,
           { size: 12, color: chgColor(chg), bold: true });
         if (s.longs.index) UI.text(ctx, '多' + s.longs.index.shares.toFixed(2) + '份@' + s.longs.index.cost.toFixed(1),
-          W - 110, chartY + 14, { size: 9.5, color: C.blue });
+          W - 110, chartY + 14, { size: 10.5, color: C.blue });
         else if (s.shorts.index) UI.text(ctx, '空' + s.shorts.index.shares.toFixed(2) + '份@' + s.shorts.index.entry.toFixed(1),
-          W - 110, chartY + 14, { size: 9.5, color: C.purple });
+          W - 110, chartY + 14, { size: 10.5, color: C.purple });
         // 指数周期切换（图表右下角），仅在全图模式显示
         if (drawChart) {
           Chart.line(ctx, cx0, chartY + 26, cw0, chartH - 40, hist, C.gold,
@@ -945,7 +1012,7 @@ var GameScene = {
             (function (L3) {
               var b = UI.button(W - 96 + liI * 30, chartY + chartH - 22, 27, 16, String(L3),
                 { bg: selfI.chartLen === L3 ? '#0e7490' : 'rgba(20,32,58,0.88)',
-                  color: selfI.chartLen === L3 ? '#fff' : C.sub, size: 9 });
+                  color: selfI.chartLen === L3 ? '#fff' : C.sub, size: 10 });
               b.onTap = function () { selfI.chartLen = L3; };
               b.draw(ctx); Scenes.buttons.push(b);
             })(lensI[liI]);
@@ -978,7 +1045,7 @@ var GameScene = {
             (function (L2) {
               var b = UI.button(W - 96 + li3 * 30, chartY + chartH - 22, 27, 16, String(L2),
                 { bg: self3.chartLen === L2 ? '#0e7490' : 'rgba(20,32,58,0.88)',
-                  color: self3.chartLen === L2 ? '#fff' : C.sub, size: 9 });
+                  color: self3.chartLen === L2 ? '#fff' : C.sub, size: 10 });
               b.onTap = function () { self3.chartLen = L2; };
               b.draw(ctx); Scenes.buttons.push(b);
             })(lens[li3]);
@@ -1015,10 +1082,10 @@ var GameScene = {
     if (latest) {
       var src = srcOf(ch, latest.src);
       UI.roundRect(ctx, 18, newsY + 6, 58, 22, 5, src.color);
-      UI.text(ctx, src.name, 47, newsY + 17, { size: 9.5, color: '#1f2937', align: 'center', bold: true });
+      UI.text(ctx, src.name, 47, newsY + 17, { size: 10.5, color: '#1f2937', align: 'center', bold: true });
       UI.textFit(ctx, latest.text, 84, newsY + 17, pausedNews ? W - 270 : W - 190, { size: 11, color: C.text });
       if (pausedNews) {
-        UI.text(ctx, '⏸ 时间已暂停', W - 108, newsY + 10, { size: 9, color: C.gold, align: 'right' });
+        UI.text(ctx, '⏸ 时间已暂停', W - 108, newsY + 10, { size: 10, color: C.gold, align: 'right' });
         var resume = UI.button(W - 100, newsY + 4, 62, 26, '继续 ▶', { bg: '#0e7490', size: 11 });
         resume.onTap = function () { s.autoPaused = false; };
         resume.draw(ctx); Scenes.buttons.push(resume);
@@ -1030,10 +1097,10 @@ var GameScene = {
     // ===== 市场列表（指数在首行，同样可交易） =====
     var listY = newsY + 42, rowH = 24;
     var mList = [{ id: 'index', name: ch.indexName }].concat(ch.stocks);
-    UI.text(ctx, '市场 · 点行切换图表', 16, listY + 10, { size: 9.5, color: C.dim });
-    UI.text(ctx, '现价', 250, listY + 10, { size: 9.5, color: C.dim });
-    UI.text(ctx, '本周', 322, listY + 10, { size: 9.5, color: C.dim, align: 'right' });
-    UI.text(ctx, '浮盈 · 成本', W - 16, listY + 10, { size: 9.5, color: C.dim, align: 'right' });
+    UI.text(ctx, '市场 · 点行切换图表', 16, listY + 10, { size: 10.5, color: C.dim });
+    UI.text(ctx, '现价', 250, listY + 10, { size: 10.5, color: C.dim });
+    UI.text(ctx, '本周', 322, listY + 10, { size: 10.5, color: C.dim, align: 'right' });
+    UI.text(ctx, '浮盈 · 成本', W - 16, listY + 10, { size: 10.5, color: C.dim, align: 'right' });
     var self2 = this;
     for (var ri2 = 0; ri2 < mList.length; ri2++) {
       var stk = mList[ri2];
@@ -1079,18 +1146,18 @@ var GameScene = {
         shortBook += T4.margin + (T4.entry - s.prices[s4]) * T4.shares;
       }
     }
-    UI.text(ctx, '现金', 26, accY + 20, { size: 9.5, color: C.dim });
+    UI.text(ctx, '现金', 26, accY + 20, { size: 10.5, color: C.dim });
     UI.text(ctx, usd(s.cash), 26, accY + 36, { size: 13, color: C.text, bold: true });
-    UI.text(ctx, '多头市值', 158, accY + 20, { size: 9.5, color: C.dim });
+    UI.text(ctx, '多头市值', 158, accY + 20, { size: 10.5, color: C.dim });
     UI.text(ctx, longMV > 1 ? usd(longMV) : '—', 158, accY + 36, { size: 13, color: C.blue, bold: true });
-    UI.text(ctx, '贷款', 290, accY + 20, { size: 9.5, color: C.dim });
+    UI.text(ctx, '贷款', 290, accY + 20, { size: 10.5, color: C.dim });
     UI.text(ctx, s.loan > 1 ? usd(s.loan) : '—', 290, accY + 36, { size: 13, color: s.loan > 1 ? '#f59e0b' : C.sub, bold: true });
-    UI.text(ctx, '空头（保证金+浮盈）', 26, accY + 58, { size: 9.5, color: C.dim });
+    UI.text(ctx, '空头（保证金+浮盈）', 26, accY + 58, { size: 10.5, color: C.dim });
     UI.text(ctx, shortBook !== 0 ? usd(shortBook) : '—', 26, accY + 74, { size: 13, color: C.purple, bold: true });
-    UI.text(ctx, '已实现盈亏', 158, accY + 58, { size: 9.5, color: C.dim });
+    UI.text(ctx, '已实现盈亏', 158, accY + 58, { size: 10.5, color: C.dim });
     UI.text(ctx, (s.stats.realized >= 0 ? '+' : '') + usd(s.stats.realized), 158, accY + 74,
       { size: 13, color: chgColor(s.stats.realized), bold: true });
-    UI.text(ctx, '累计分红', 290, accY + 58, { size: 9.5, color: C.dim });
+    UI.text(ctx, '累计分红', 290, accY + 58, { size: 10.5, color: C.dim });
     UI.text(ctx, usd(s.stats.div), 290, accY + 74, { size: 13, color: C.sub, bold: true });
 
     // 通关进度条 + 目标线标注（加粗可见）
@@ -1138,7 +1205,7 @@ var GameScene = {
     }
 
     UI.text(ctx, '时间自动流动 · 弹窗时暂停 · 红涨绿跌', W / 2, H - 10,
-      { size: 9, color: C.dim, align: 'center' });
+      { size: 10, color: C.dim, align: 'center' });
 
     // 即时成就 toast（顶部堆叠；图表隐藏的矮窗口下改放列表表头带，避免压住 tabs）
     var toastY0 = drawChart ? 100 : listY - 6;
@@ -1212,7 +1279,7 @@ var GameScene = {
             var col = on ? '#7f1d1d' : C.panel2;
             UI.roundRect(ctx, 116 + k6 * 62, py + 84, 58, 22, 5, col, on ? '#fca5a5' : null);
             UI.text(ctx, lbl, 145 + k6 * 62, py + 98,
-              { size: 9.5, color: on ? '#fca5a5' : C.sub, align: 'center', bold: on });
+              { size: 10.5, color: on ? '#fca5a5' : C.sub, align: 'center', bold: on });
             modal.orderRects = modal.orderRects || [];
             modal.orderRects.push({ x: 116 + k6 * 62, y: py + 84, w: 58, h: 22, fn: function () {
               modal.stopPick = pv;
@@ -1301,7 +1368,7 @@ var GameScene = {
           var nm3 = wrap(ctx, opt.name, rw3 - 16, 12);
           UI.lines(ctx, nm3.slice(0, 2), rx + rw3 / 2, pyR + 148, 16, { size: 12, color: C.gold, align: 'center', bold: true });
           var ds3 = wrap(ctx, opt.desc, rw3 - 16, 9.5);
-          UI.lines(ctx, ds3.slice(0, 4), rx + 8, pyR + 182, 13.5, { size: 9.5, color: C.sub });
+          UI.lines(ctx, ds3.slice(0, 4), rx + 8, pyR + 182, 13.5, { size: 10.5, color: C.sub });
         })(modal.options[ri3], ri3);
       }
       var nextEra = D.centuryEras[s.century.idx + 1];
@@ -1355,10 +1422,10 @@ var GameScene = {
           var st4 = Core.stock(ch, it4.id);
           var nm4 = st4 ? st4.name : it4.id;
           var verb = { buy: '买入', sell: '卖出', short: '做空', cover: '平空' }[it4.type] || it4.type;
-          UI.text(ctx, Core.dateLabel(ch, it4.w), 32, iy4 + 4, { size: 9, color: C.dim });
+          UI.text(ctx, Core.dateLabel(ch, it4.w), 32, iy4 + 4, { size: 10, color: C.dim });
           UI.text(ctx, verb + ' ' + nm4, 96, iy4 + 4, { size: 11, color: C.text, bold: true });
           UI.textFit(ctx, it4.shares.toFixed(2) + ' 份 @ ' + usd(it4.price), W - 32, iy4 + 4, 130,
-            { size: 9.5, color: C.sub, align: 'right' });
+            { size: 10.5, color: C.sub, align: 'right' });
           if (it4.pnl !== undefined) {
             UI.text(ctx, (it4.pnl >= 0 ? '+' : '') + usd(it4.pnl), W - 32, iy4 + 22,
               { size: 11.5, color: chgColor(it4.pnl), align: 'right', bold: true });
@@ -1378,7 +1445,7 @@ var GameScene = {
             parts2.push(nm2 + ' 对' + s.srcScore[scKeys[pi]].ok + ' 错' + s.srcScore[scKeys[pi]].bad);
           }
           var sbLines = wrap(ctx, '预言战绩　' + parts2.join(' · '), W - 60, 9.5);
-          UI.lines(ctx, sbLines.slice(0, 2), W / 2, fy, 15, { size: 9.5, color: C.gold, align: 'center' });
+          UI.lines(ctx, sbLines.slice(0, 2), W / 2, fy, 15, { size: 10.5, color: C.gold, align: 'center' });
           fy += Math.min(sbLines.length, 2) * 15 + 4;
         }
         ctx.save();
@@ -1395,7 +1462,7 @@ var GameScene = {
             var src2 = srcOf(ch, it2.src);
             UI.roundRect(ctx, 28, fy2 - 10, 56, 18, 4, src2.color);
             UI.text(ctx, src2.name, 56, fy2 + 2, { size: 8.5, color: '#1f2937', align: 'center', bold: true });
-            UI.text(ctx, Core.dateLabel(ch, it2.w), 94, fy2 + 2, { size: 9, color: C.dim });
+            UI.text(ctx, Core.dateLabel(ch, it2.w), 94, fy2 + 2, { size: 10, color: C.dim });
             var vd2 = null, pend2 = false, vk2;
             for (vk2 = 0; vk2 < s.verdicts.length; vk2++) {
               if (s.verdicts[vk2].w === it2.w && s.verdicts[vk2].src === it2.src) { vd2 = s.verdicts[vk2]; break; }
@@ -1409,10 +1476,10 @@ var GameScene = {
               var vdCol = vd2.ok ? C.gold : C.dim;
               UI.roundRect(ctx, W - 90, fy2 - 10, 64, 18, 4, null, vdCol);
               UI.text(ctx, vd2.ok ? '应验·' + (vd2.dir === 'boom' ? '涨' : '跌') : '落空',
-                W - 58, fy2 + 2, { size: 9, color: vdCol, align: 'center', bold: true });
+                W - 58, fy2 + 2, { size: 10, color: vdCol, align: 'center', bold: true });
             } else if (pend2) {
               UI.roundRect(ctx, W - 90, fy2 - 10, 64, 18, 4, null, C.blue);
-              UI.text(ctx, '预言中', W - 58, fy2 + 2, { size: 9, color: C.blue, align: 'center', bold: true });
+              UI.text(ctx, '预言中', W - 58, fy2 + 2, { size: 10, color: C.blue, align: 'center', bold: true });
             }
             var tls2 = wrap(ctx, it2.text, W - 76, 11);
             for (var li2 = 0; li2 < tls2.length && li2 < 3; li2++) {
@@ -1440,7 +1507,7 @@ var GameScene = {
       UI.roundRect(ctx, 16, pyO, W - 32, H - 192, 12, C.panel, C.border);
       UI.text(ctx, '挂单管理 · 止损与止盈', W / 2, pyO + 26, { size: 14, color: C.text, align: 'center', bold: true });
       UI.textFit(ctx, '挂单每周检查一次，触发即按市价全部平仓', W / 2, pyO + 46, W - 60,
-        { size: 9.5, color: C.dim, align: 'center' });
+        { size: 10.5, color: C.dim, align: 'center' });
       modal.orderRects = [];
       var oy = pyO + 62;
       var has = false;
@@ -1465,7 +1532,7 @@ var GameScene = {
             var col = on ? '#7f1d1d' : C.panel2;
             UI.roundRect(ctx, 96 + k5 * 54, oy + 30, 50, 22, 5, col, on ? '#fca5a5' : null);
             UI.text(ctx, (L5 ? '-' : '+') + Math.round(pv * 100) + '%', 121 + k5 * 54, oy + 44,
-              { size: 9.5, color: on ? '#fca5a5' : C.sub, align: 'center', bold: on });
+              { size: 10.5, color: on ? '#fca5a5' : C.sub, align: 'center', bold: on });
             modal.orderRects.push({ x: 96 + k5 * 54, y: oy + 30, w: 50, h: 22, fn: function () {
               s.orders[stX.id] = s.orders[stX.id] || {};
               if (on) delete s.orders[stX.id].stop; else s.orders[stX.id].stop = pv;
@@ -1479,14 +1546,14 @@ var GameScene = {
             var col = on ? '#134e4a' : C.panel2;
             UI.roundRect(ctx, 96 + k5 * 54, oy + 62, 50, 22, 5, col, on ? '#5eead4' : null);
             UI.text(ctx, '+' + Math.round(pv * 100) + '%', 121 + k5 * 54, oy + 76,
-              { size: 9.5, color: on ? '#5eead4' : C.sub, align: 'center', bold: on });
+              { size: 10.5, color: on ? '#5eead4' : C.sub, align: 'center', bold: on });
             modal.orderRects.push({ x: 96 + k5 * 54, y: oy + 62, w: 50, h: 22, fn: function () {
               s.orders[stX.id] = s.orders[stX.id] || {};
               if (on) delete s.orders[stX.id].target; else s.orders[stX.id].target = pv;
             } });
           })([0.25, 0.5][ti5], ti5, st5);
         }
-        UI.text(ctx, '未设', W - 40, oy + 74, { size: 9.5, color: C.dim, align: 'right' });
+        UI.text(ctx, '未设', W - 40, oy + 74, { size: 10.5, color: C.dim, align: 'right' });
         oy += 104;
       }
       if (!has) UI.text(ctx, '没有持仓——先买入或做空，再来挂单。', W / 2, oy + 20,
@@ -1547,7 +1614,7 @@ var GameScene = {
         })(lensB[liB], liB);
       }
       UI.text(ctx, '─ 成本 · ─ 止损 · ─ 止盈', W - 24, cyB + chB + 26,
-        { size: 9, color: C.dim, align: 'right' });
+        { size: 10, color: C.dim, align: 'right' });
       // 交易快捷入口（替代被面板挡住的主交易行）
       var selfBT = this;
       var actsB = [
@@ -1623,7 +1690,7 @@ var GameScene = {
       var verb = lg.kind === 'sell' ? '卖出' : '回购';
       UI.textFit(ctx, verb + ' ' + st.name + ' ' + lg.shares.toFixed(2) + ' 股 @ ' + usd(lg.price),
         40, ly, W - 120, { size: 11.5, color: C.text });
-      UI.text(ctx, '强平', W - 40, ly, { size: 9.5, color: C.danger, align: 'right' });
+      UI.text(ctx, '强平', W - 40, ly, { size: 10.5, color: C.danger, align: 'right' });
       ly += 22;
     }
     var ri = Core.riskInfo(s);
@@ -1657,7 +1724,7 @@ var GameScene = {
       for (var q = 0; q < seg.length; q += 2) flat.push(seg[q].eq);
     }
     if (flat.length > 2) Chart.line(ctx, 28, 118, W - 56, 110, flat, c.done ? C.gold : C.danger, { base: 1000 });
-    UI.text(ctx, '百年净值（起点虚线 $1,000）', 28, 112, { size: 9, color: C.dim });
+    UI.text(ctx, '百年净值（起点虚线 $1,000）', 28, 112, { size: 10, color: C.dim });
 
     // 时代战绩
     var ly = 258;
@@ -1797,7 +1864,7 @@ var GameScene = {
     var eqArr = [];
     for (var ei = 0; ei < s.eqHist.length; ei += Math.max(1, Math.floor(s.eqHist.length / 120))) eqArr.push(s.eqHist[ei].eq);
     if (eqArr[eqArr.length - 1] !== s.eqHist[s.eqHist.length - 1].eq) eqArr.push(s.eqHist[s.eqHist.length - 1].eq);
-    UI.text(ctx, '净值旅程', 32, py + 298, { size: 9.5, color: C.dim });
+    UI.text(ctx, '净值旅程', 32, py + 298, { size: 10.5, color: C.dim });
     Chart.line(ctx, 32, py + 302, W - 64, 46, eqArr, C.gold, { base: ch.startCash });
 
     // 解锁播报（成就 / 图鉴）
@@ -1818,9 +1885,20 @@ var GameScene = {
     UI.lines(ctx, wrap(ctx, verdicts[s.result.stars], W - 100, 12.5), W / 2, py + 402, 19,
       { size: 12.5, color: C.text, align: 'center' });
 
+    // 主按钮：有下一章就直接推进（每日挑战是单章玩法，不串章；百年孤旅走自己的结算页）
     var bw = (W - 48 - 30) / 4;
-    var again = UI.button(24, py + 444, bw, 40, '再来一次', { bg: '#0e7490', size: 11.5 });
-    again.onTap = function () { G.state = Core.newRun(s.ch); Scenes.go(GameScene); };
+    var chIdx2 = -1, ci2;
+    for (ci2 = 0; ci2 < D.chapters.length; ci2++) {
+      if (D.chapters[ci2].id === ch.id) { chIdx2 = ci2; break; }
+    }
+    var nextCh = (!s.daily && !s.century && chIdx2 >= 0 && chIdx2 < D.chapters.length - 1)
+      ? D.chapters[chIdx2 + 1] : null;
+    var again = UI.button(24, py + 444, bw, 40, nextCh ? '下一章 ▶' : '再来一次',
+      { bg: nextCh ? '#7c3aed' : '#0e7490', size: 11.5 });
+    again.onTap = function () {
+      G.state = Core.newRun(nextCh ? nextCh.id : s.ch);
+      Scenes.go(GameScene);
+    };
     again.draw(ctx); Scenes.buttons.push(again);
     var home = UI.button(24 + (bw + 10), py + 444, bw, 40, '回到时间轴', { bg: C.panel2, color: C.sub, size: 11.5 });
     home.onTap = function () { G.state = null; Scenes.go(SelectScene); };
@@ -1842,7 +1920,9 @@ var GameScene = {
     };
     ad.draw(ctx); Scenes.buttons.push(ad);
 
-    UI.text(ctx, ch.next || '更多时代章节制作中', W / 2, py + 510, { size: 10.5, color: C.dim, align: 'center' });
+    UI.textFit(ctx, nextCh ? ('下一章：' + nextCh.era + ' · ' + nextCh.name)
+      : (ch.next || '更多时代章节制作中'), W / 2, py + 510, W - 48,
+      { size: 10.5, color: C.dim, align: 'center' });
   },
 
   // —— 爆仓 ——
@@ -1920,7 +2000,7 @@ function makeBattleCard(s, ch, beat, nwChg, idxChg) {
   var eqArr2 = [];
   for (var ei2 = 0; ei2 < s.eqHist.length; ei2 += Math.max(1, Math.floor(s.eqHist.length / 140))) eqArr2.push(s.eqHist[ei2].eq);
   if (eqArr2[eqArr2.length - 1] !== s.eqHist[s.eqHist.length - 1].eq) eqArr2.push(s.eqHist[s.eqHist.length - 1].eq);
-  UI.text(x2, '净值旅程', 34, 232, { size: 9.5, color: '#5a6c92' });
+  UI.text(x2, '净值旅程', 34, 232, { size: 10.5, color: '#5a6c92' });
   Chart.line(x2, 34, 236, CW2 - 68, 64, eqArr2, '#fbbf24', { base: ch.startCash });
   // 数据行
   var best2 = null, worst2 = null;
@@ -1955,7 +2035,7 @@ function makeBattleCard(s, ch, beat, nwChg, idxChg) {
     ry2 += evN2.length * 18 + 10;
   }
   UI.text(x2, '你能在华尔街活过几个时代？', CW2 / 2, CH3 - 64, { size: 12.5, color: '#d7e0f2', align: 'center', bold: true });
-  UI.text(x2, '黑天鹅世纪 · 华尔街百年生存模拟', CW2 / 2, CH3 - 40, { size: 9.5, color: '#5a6c92', align: 'center' });
+  UI.text(x2, '黑天鹅世纪 · 华尔街百年生存模拟', CW2 / 2, CH3 - 40, { size: 10.5, color: '#5a6c92', align: 'center' });
   Platform.saveCard(cv, '我在《黑天鹅世纪》' + ch.era + ' 把 $1,000 做到 ' + usd(s.result.nw));
 }
 

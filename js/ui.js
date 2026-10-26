@@ -62,8 +62,15 @@ UI.button = function (x, y, w, h, label, opt) {
       ctx.globalAlpha = this.disabled ? 0.35 : 1;
       UI.roundRect(ctx, this.x, this.y, this.w, this.h, 8, this.bg, this.border);
       if (this.label) {
+        // 窄屏/四列布局下按钮变窄：字号自动降到放得下为止（下限 8.5），避免文字溢出按钮
+        var fs = this.size, maxLabelW = this.w - 8;
+        ctx.font = 'bold ' + fs + 'px sans-serif';
+        while (fs > 8.5 && ctx.measureText(this.label).width > maxLabelW) {
+          fs -= 0.5;
+          ctx.font = 'bold ' + fs + 'px sans-serif';
+        }
         UI.text(ctx, this.label, this.x + this.w / 2, this.y + this.h / 2 + 1,
-          { size: this.size, color: this.color, align: 'center', baseline: 'middle', bold: true });
+          { size: fs, color: this.color, align: 'center', baseline: 'middle', bold: true });
       }
       ctx.globalAlpha = 1;
     }

@@ -5,6 +5,10 @@
 var Platform = {
   isWechat: false,
   W: 390, H: 780, dpr: 1,
+  // 逻辑高度低于 MIN_H 时界面放不下（横屏手机 / 桌面拖窗过矮 / 分屏）：由 scenes 出提示层兜底
+  // 480 是折中值：真机横屏 innerHeight≈390 会被拦，而常见竖屏（含浏览器工具栏）都在 500+ 放行
+  MIN_H: 480,
+  tooShort: false,
   canvas: null, ctx: null,
   // 由 main.js 注入：Platform.onTouch = {start, move, end}
   onTouch: null
@@ -23,6 +27,7 @@ Platform.init = function () {
     var wxApply = function (w, h) {
       if (!w || !h || w < 100 || h < 120) return;   // 过渡态 0 尺寸忽略
       self.W = w; self.H = h;
+      self.tooShort = h < self.MIN_H;
       self.canvas.width = Math.floor(self.W * self.dpr);
       self.canvas.height = Math.floor(self.H * self.dpr);
       if (self.ctx) self.ctx.setTransform(self.dpr, 0, 0, self.dpr, 0, 0);
@@ -42,6 +47,7 @@ Platform.init = function () {
       self2.dpr = window.devicePixelRatio || 1;
       self2.W = Math.min(430, iw);
       self2.H = ih;
+      self2.tooShort = ih < self2.MIN_H;
       canvas.width = Math.floor(self2.W * self2.dpr);
       canvas.height = Math.floor(self2.H * self2.dpr);
       canvas.style.width = self2.W + 'px';
