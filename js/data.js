@@ -13,7 +13,8 @@ D.SOURCES = {
   paperboy:  { name: '街头报童', cred: '可信度 ★★☆☆☆', color: '#94a3b8' },
   broker:    { name: '券商研报', cred: '可信度 ★★★☆☆', color: '#60a5fa' },
   insider:   { name: '神秘内线', cred: '可信度 ★★★★☆', color: '#c084fc' },
-  oracle:    { name: '名人语录', cred: '可信度 ★★★☆☆', color: '#fbbf24' }
+  oracle:    { name: '名人语录', cred: '可信度 ★★★☆☆', color: '#fbbf24' },
+  ticker:    { name: '市场快讯', cred: '可信度 ★★☆☆☆', color: '#22d3ee' }
 };
 
 // ---------- 第一章：1926–1932 柯立芝繁荣与大崩盘 ----------
@@ -186,6 +187,24 @@ D.chapters = [
       { src: 'oracle', text: '作家在专栏写道："当所有人都开始谈论股票时，请摸摸自己的口袋。"' },
       { src: 'broker', text: '研报风险提示：历史不会重复，但会押着同样的韵脚。' },
       { src: 'paperboy', text: '号外：失业率悄然爬升，华尔街却毫无察觉。' }
+    ],
+
+    // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+    smallNews: [
+      { tgt: 'steel', ret: -0.005, weeks: 5, text: '匹兹堡的焦炭报价连涨三周，{name}的冶炼成本被顶高了一截。' },
+      { tgt: 'radio', ret: 0.007, weeks: 5, text: '{name}的订单排到明年：收音机销量首次破百万台，百货公司的柜台前排起了队。' },
+      { tgt: 'autos', ret: 0.006, weeks: 4, text: '底特律传来消息：{name}新车型的预售订单已经排到明年春天。' },
+      { tgt: 'bank', ret: 0.005, weeks: 5, text: '储蓄存款连续第六个月净流入，{name}的柜台加开了两个窗口。' },
+      { tgt: 'estate', ret: 0.008, weeks: 4, text: '{name}的售楼处排队到街角——佛罗里达的地皮中介把广告打上了北方报纸的头版："冬季不用铲雪"。' },
+      { tgt: 'utility', ret: -0.005, weeks: 5, text: '州议会通过电费下调议案，{name}的利润表要重新算一遍。' },
+      { tgt: 'steel', ret: 0.006, weeks: 4, text: '铁路公司追加两万节车厢订单，{name}的车间改成了三班倒，钢轨排产一下子吃紧。' },
+      { tgt: 'all', ret: -0.003, weeks: 3, text: '联邦储备委员会内部对"投机过热"起了争执，市场当作没听见。' },
+      { tgt: 'radio', ret: -0.006, weeks: 5, text: '无线电专利官司缠身，同业把{name}告上了法庭，报纸只在社会版提了两行。' },
+      { tgt: 'autos', ret: -0.006, weeks: 4, text: '新车在试车场连续爆胎，{name}的销售部连夜改口径，经销商悄悄退了三成订单。' },
+      { tgt: 'bank', ret: 0.003, weeks: 4, text: '一家乡下小银行因挪用存款被查封，{name}的柜台前多了陌生面孔——储户扛着麻袋来城里打听"哪家最稳"。' },
+      { tgt: 'estate', ret: -0.006, weeks: 4, text: '一场秋雨泡烂了新打的地基，{name}的工程款要延期到明年，包工头开始四处借钱。' },
+      { tgt: 'utility', ret: 0.005, weeks: 4, text: '入冬后用电量创下十年新高，{name}的发电机组满负荷运转，煤仓只剩半个月存量。' },
+      { tgt: 'all', ret: 0.003, weeks: 3, text: '纽约证券交易所成交量连刷纪录，报纸用"永不落幕的宴会"来形容这个秋天。' }
     ]
   },
 
@@ -351,6 +370,24 @@ D.chapters = [
       { src: 'oracle', text: '炉边谈话金句："领跑的人，也要回头看一眼队伍。"' },
       { src: 'paperboy', text: '街头巷尾：孩子们开始玩"交易所"的游戏。' },
       { src: 'broker', text: '技术派宣言：这条趋势线，比总统的演讲更诚实。' }
+    ],
+
+    // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+    smallNews: [
+      { tgt: 'autos2', ret: 0.006, weeks: 4, text: '{name}的流水线加开第二班：汽车厂重新开工，招工栏前排到了街角。' },
+      { tgt: 'steel2', ret: 0.007, weeks: 5, text: '公共工程局签下一批桥梁钢梁合同，{name}的订单簿第一次被填满。' },
+      { tgt: 'bank2', ret: 0.006, weeks: 5, text: '存款保险法案通过，{name}的存款涨了两成——储户把床底下的钱搬回了柜台。' },
+      { tgt: 'power2', ret: 0.006, weeks: 5, text: '河谷的电线杆一根根立起来，{name}的电表开始走进农家。' },
+      { tgt: 'cine2', ret: 0.006, weeks: 4, text: '一张五分钱的电影票，{name}的影院场场满座——失业的人也能做两小时梦。' },
+      { tgt: 'avia2', ret: 0.008, weeks: 4, text: '邮政署招标跨洲航线，{name}抢下了最赚钱的那一段。' },
+      { tgt: 'autos2', ret: -0.007, weeks: 4, text: '工会罢工进入第三周，{name}的产线停摆，经销商开始退订单。' },
+      { tgt: 'steel2', ret: -0.005, weeks: 5, text: '废钢价格上涨，{name}的毛利被压薄，车间改成了单班。' },
+      { tgt: 'bank2', ret: -0.005, weeks: 4, text: '证券交易委员会盯上了承销业务，{name}的投行部门要交一堆账本。' },
+      { tgt: 'power2', ret: -0.005, weeks: 5, text: '电价听证会吵成一团，{name}的提价申请被驳回。' },
+      { tgt: 'cine2', ret: -0.007, weeks: 4, text: '片厂一场大火烧掉三个棚，{name}明年的排片表空了一半。' },
+      { tgt: 'avia2', ret: -0.008, weeks: 4, text: '{name}的股价先跌再问：一架新机在试飞中失事，报纸头版连登三天。' },
+      { tgt: 'all', ret: 0.004, weeks: 4, text: '救济站的队伍短了一些，报纸悄悄把"复苏"两个字放回了标题。' },
+      { tgt: 'all', ret: -0.002, weeks: 3, text: '国会又在吵预算，市场打了个哈欠——这已经是今年的第七次。' }
     ]
   }
 ];
@@ -390,7 +427,7 @@ D.randomEvents = [
   { kind: 'all', pct: [0.03, 0.05], text: '央行意外放松银根，市场欢呼。' },
   { kind: 'all', pct: [-0.06, -0.03], text: '央行收紧信贷，市场打了个寒颤。' },
   { kind: 'single', pct: [-0.09, -0.05], text: '{name}陷入劳资纠纷，运营一度受挫。' },
-  { kind: 'single', pct: [0.06, 0.12], text: '传闻 {name} 将被行业巨头并购。' },
+  { kind: 'single', pct: [0.06, 0.12], text: '传闻{name}将被行业巨头并购。' },
   { kind: 'single', pct: [0.04, 0.07], text: '{name}所在行业订单大增，景气度飙升。' }
 ];
 D.swanHints = {
@@ -486,6 +523,24 @@ D.chapters.push({
       { src: 'oracle', text: '专栏："别和战争的趋势作对，也别和和平的到来赌气。"' },
       { src: 'paperboy', text: '战地广播：今晚有总统讲话！' },
       { src: 'oracle', text: '老兵忠告："胜利日卖股票的人，和开战日买债券的人，都输给了时间。"' }
+    ],
+
+    // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+    smallNews: [
+      { tgt: 'arms3', ret: 0.008, weeks: 4, text: '军方追加一笔弹药订单，{name}的三条产线连夜改成两班倒。' },
+      { tgt: 'ship3', ret: 0.007, weeks: 5, text: '自由轮的建造周期被压到四十天，{name}的船台又扩了两个。' },
+      { tgt: 'can3', ret: 0.006, weeks: 4, text: '前线要罐头，后方也要罐头，{name}的镀锡薄板配额被优先保住。' },
+      { tgt: 'rub3', ret: 0.008, weeks: 5, text: '橡胶配额又砍了一成，{name}的合成胶产线成了宝贝——黑市价格翻倍。' },
+      { tgt: 'air3', ret: 0.007, weeks: 4, text: '一架新型轰炸机完成试飞，{name}当天接到了追加订单的电话。' },
+      { tgt: 'radio3', ret: 0.005, weeks: 4, text: '家家户户守着收音机听战报，{name}的广告时段价格涨了三倍。' },
+      { tgt: 'arms3', ret: -0.006, weeks: 4, text: '一场验收事故让整批弹药返工，{name}的交付延后一个季度。' },
+      { tgt: 'ship3', ret: -0.006, weeks: 4, text: '船厂工人被征召入伍，焊工不够，{name}的交付表只能往后推。' },
+      { tgt: 'can3', ret: -0.005, weeks: 4, text: '糖和咖啡开始配给，{name}的民用产品线停了两条。' },
+      { tgt: 'rub3', ret: -0.008, weeks: 4, text: '一艘运胶船在大西洋被击沉，{name}的原料库存只够六周。' },
+      { tgt: 'air3', ret: -0.007, weeks: 4, text: '引擎供应跟不上，{name}的新机型交付撞上了瓶颈。' },
+      { tgt: 'radio3', ret: -0.006, weeks: 5, text: '真空管被列为军需品，民用量被砍，{name}的收音机产量跌了一半。' },
+      { tgt: 'all', ret: -0.003, weeks: 4, text: '配给券又加了一页，主妇们在店门口交换着彼此的"办法"。' },
+      { tgt: 'all', ret: 0.003, weeks: 3, text: '欧洲战场的消息一天比一天好，市场却开始盘算"战后怎么办"。' }
     ]
 });
 
@@ -564,6 +619,24 @@ D.chapters.push({
     { src: 'oracle', text: '老股民："当一个名字带『电子』就涨停，请系好安全带。"' },
     { src: 'paperboy', text: '号外：总统遇刺！国家降半旗。' },
     { src: 'oracle', text: '专栏："六十年代教会世界的事：乐观也能杀人。"' }
+  ],
+
+  // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+  smallNews: [
+    { tgt: 'tron4', ret: 0.009, weeks: 4, text: '"电子"两个字就是估值——{name}的买盘根本不看利润表。' },
+    { tgt: 'space4', ret: 0.008, weeks: 5, text: '登月计划追加预算，{name}的工程师从三百人扩到九百人。' },
+    { tgt: 'mart4', ret: 0.006, weeks: 4, text: '郊区第一家带停车场的超市开业，{name}的购物车被推走了两千辆。' },
+    { tgt: 'film4', ret: 0.006, weeks: 4, text: '一部宽银幕大片连映十四周，{name}的片库估值被重新算过。' },
+    { tgt: 'chem4', ret: 0.006, weeks: 5, text: '尼龙袜和涤纶衬衫一起流行，{name}的化纤产量翻番。' },
+    { tgt: 'cola4', ret: 0.005, weeks: 4, text: '自动售货机铺进加油站，{name}的出货量创下新纪录。' },
+    { tgt: 'tron4', ret: -0.008, weeks: 4, text: '电话会后{name}跌了一截——分析师第一次追问"你们到底靠什么赚钱"。' },
+    { tgt: 'space4', ret: -0.007, weeks: 4, text: '一次试射失败被电视直播，{name}的合同审查被推迟。' },
+    { tgt: 'mart4', ret: -0.005, weeks: 4, text: '新店选址撞上社区争议，{name}的开店计划卡在听证会。' },
+    { tgt: 'film4', ret: -0.006, weeks: 4, text: '明星片酬谈判破裂，{name}的两部在拍影片停摆。' },
+    { tgt: 'chem4', ret: -0.006, weeks: 5, text: '进口化纤低价涌入，{name}的报价被迫下调一成。' },
+    { tgt: 'cola4', ret: -0.005, weeks: 4, text: '一篇关于糖分的调查报道见报，{name}的公关部连夜开会。' },
+    { tgt: 'all', ret: 0.005, weeks: 4, text: '"增长股"成了报纸的新词，共同基金的申购单排到了走廊。' },
+    { tgt: 'all', ret: -0.003, weeks: 3, text: '央行行长在国会提了一句"估值失衡"，市场只跌了半天。' }
   ]
 });
 
@@ -648,6 +721,24 @@ D.chapters.push({
     { src: 'oracle', text: '专栏："通胀是无需立法的税收。"' },
     { src: 'paperboy', text: '号外：金价新高！抢购黄金！' },
     { src: 'oracle', text: '老兵："熊市里最贵的四个字：这次不同。"' }
+  ],
+
+  // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+  smallNews: [
+    { tgt: 'oil5', ret: 0.009, weeks: 5, text: '产油国又减产一成，油价站上新高，{name}的现金像井喷一样涌出来。' },
+    { tgt: 'gold5', ret: 0.008, weeks: 5, text: '金价突破历史高位，{name}的矿脉品位突然变得"很划算"。' },
+    { tgt: 'boo5', ret: 0.006, weeks: 5, text: '通胀年代能存的东西都涨价——{name}的窖藏成了硬通货。' },
+    { tgt: 'auto5', ret: 0.007, weeks: 4, text: '一款小型车意外走红，{name}的产线改产计划提前了一年。' },
+    { tgt: 'oil5', ret: -0.006, weeks: 4, text: '一处海上平台被飓风摧毁，{name}的产量掉了半个月。' },
+    { tgt: 'nif5', ret: -0.007, weeks: 5, text: '{name}的机构股东开始互相打听谁在卖："漂亮五十"的市盈率第一次跌破三十倍。' },
+    { tgt: 'util5', ret: -0.006, weeks: 5, text: '燃料成本转嫁不出去，{name}的利润表被通胀咬了一口。' },
+    { tgt: 'auto5', ret: -0.007, weeks: 4, text: '油价高企，大排量车在展厅里落灰，{name}的经销商开始打折。' },
+    { tgt: 'gold5', ret: -0.005, weeks: 4, text: '官方拍卖黄金压价，{name}的股价跟着回落。' },
+    { tgt: 'boo5', ret: -0.007, weeks: 4, text: '一批假酒案曝光，全行业被查，{name}也被要求提供来源账。' },
+    { tgt: 'nif5', ret: -0.006, weeks: 4, text: '{name}首当其冲：一家"漂亮五十"公司下调盈利预期，多米诺从这一张开始倒。' },
+    { tgt: 'util5', ret: -0.006, weeks: 5, text: '核电站审批被无限期延后，{name}的资本开支变成了沉没成本。' },
+    { tgt: 'all', ret: -0.004, weeks: 4, text: '物价指数又超预期，主妇们开始囤罐头——市场在算"还要多久"。' },
+    { tgt: 'all', ret: -0.003, weeks: 3, text: '工资管制与价格管制同时出台，企业说：这不是经济学，是算术。' }
   ]
 });
 
@@ -728,6 +819,24 @@ D.chapters.push({
     { src: 'oracle', text: '专栏："市场在最欢腾时最脆弱。"' },
     { src: 'paperboy', text: '号外：东京股市市值超纽约！' },
     { src: 'oracle', text: '老兵："1987 那天，我学到的不是止损，是对流动性的敬畏。"' }
+  ],
+
+  // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+  smallNews: [
+    { tgt: 'chip6', ret: 0.008, weeks: 5, text: '个人电脑销量第一次超过彩电，{name}的订单簿厚得像电话本。' },
+    { tgt: 'bank6', ret: 0.007, weeks: 5, text: '储贷业务松绑落地，{name}的网点一年开了四十家。' },
+    { tgt: 'bio6', ret: 0.008, weeks: 4, text: '一项基因专利获批，{name}的实验室被投资人挤破了门。' },
+    { tgt: 'air6', ret: 0.006, weeks: 4, text: '机票价格战开打，{name}的上座率却创下新高。' },
+    { tgt: 'ret6', ret: 0.006, weeks: 5, text: '商场里的连锁店排到了三层，{name}的租金收入涨了两成。' },
+    { tgt: 'chip6', ret: -0.007, weeks: 4, text: '内存价格战让毛利率腰斩，{name}的季度报表被券商下调。' },
+    { tgt: 'bank6', ret: -0.006, weeks: 5, text: '一批房贷坏账浮出水面，{name}的拨备要加提。' },
+    { tgt: 'bio6', ret: -0.009, weeks: 3, text: '临床试验中止，{name}的股价一天跌掉一个季度的涨幅。' },
+    { tgt: 'air6', ret: -0.006, weeks: 3, text: '飞行员罢工三天，{name}取消了四成航班。' },
+    { tgt: 'ret6', ret: -0.005, weeks: 4, text: '郊区新开一家更大更亮的商场，{name}的客流被分走了一截。' },
+    { tgt: 'oil6', ret: -0.006, weeks: 3, text: '一场飓风扫过墨西哥湾，{name}的产量停了两周。' },
+    { tgt: 'oil6', ret: -0.007, weeks: 4, text: '油价跌破十美元，{name}的钻井平台停了三成。' },
+    { tgt: 'all', ret: 0.005, weeks: 4, text: '杠杆收购成了流行词，券商说"没有买不下的公司"。' },
+    { tgt: 'all', ret: 0.004, weeks: 3, text: '指数连创新高，连出租车司机都在聊"年底上三千"。' }
   ]
 });
 
@@ -808,6 +917,24 @@ D.chapters.push({
     { src: 'oracle', text: '老股民："我一个卖报纸的都知道互联网改变世界——但这和股价是两回事。"' },
     { src: 'paperboy', text: '号外：道指万点！' },
     { src: 'oracle', text: '专栏："此刻所有人都赚钱，所以此刻最危险。"' }
+  ],
+
+  // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+  smallNews: [
+    { tgt: 'web7', ret: 0.009, weeks: 5, text: '上网人数第一次突破千万，{name}的首页每天被刷新三百万次。' },
+    { tgt: 'tel7', ret: 0.008, weeks: 5, text: '跨洋光缆的需求爆单，{name}的排产排到两年后。' },
+    { tgt: 'drug7', ret: 0.006, weeks: 4, text: '一款新药提前获批，{name}的专利期还剩九年。' },
+    { tgt: 'bank7', ret: 0.006, weeks: 5, text: '两笔大并购接连签下，{name}的投行部门成了印钞机。' },
+    { tgt: 'soda7', ret: 0.005, weeks: 5, text: '海外市场一年新增三亿消费者，{name}的装瓶厂开到了第 190 个国家。' },
+    { tgt: 'web7', ret: 0.007, weeks: 4, text: '"点击率"三个字被写进研报，{name}的亏损被解释成"战略性投入"。' },
+    { tgt: 'tel7', ret: -0.007, weeks: 4, text: '产能过剩的忧虑浮出水面，{name}的光缆报价开始下滑。' },
+    { tgt: 'drug7', ret: -0.006, weeks: 5, text: '一项核心专利被挑战，{name}的仿制药竞争者提前进场。' },
+    { tgt: 'bank7', ret: -0.007, weeks: 4, text: '新兴市场一笔债务违约，{name}的交易台连夜平仓。' },
+    { tgt: 'ind7', ret: -0.006, weeks: 4, text: '一场罢工让产线停摆三周，{name}的客户转去了进口钢。' },
+    { tgt: 'ind7', ret: -0.006, weeks: 5, text: '进口钢材压价，{name}的高炉停了一座。' },
+    { tgt: 'soda7', ret: -0.004, weeks: 3, text: '一场配方争议的公关危机，{name}的瓶装销量短暂下滑。' },
+    { tgt: 'all', ret: 0.005, weeks: 4, text: '共同基金年流入创纪录，"股神"第十九次登上杂志封面。' },
+    { tgt: 'all', ret: 0.003, weeks: 3, text: '"这次不一样：生产率革命"——这份研报的标题，今年第 47 次出现。' }
   ]
 });
 
@@ -890,6 +1017,24 @@ D.chapters.push({
     { src: 'shoeshine', text: '股吧里的老散户清仓了，说炒股不如打工。' },
     { src: 'paperboy', text: '号外：国会听证！' },
     { src: 'oracle', text: '专栏："泡沫破灭后，真正的好公司才开始打折。"' }
+  ],
+
+  // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+  smallNews: [
+    { tgt: 'pet8', ret: 0.009, weeks: 3, text: '{name}跟着被重估：一家宠物用品网站拿到第三轮融资，估值超过老牌零售商三倍。' },
+    { tgt: 'fib8', ret: 0.006, weeks: 3, text: '运营商继续铺设"用不完"的带宽，{name}的订单排到明年。' },
+    { tgt: 'drg8', ret: 0.005, weeks: 5, text: '一款重磅药进入医保目录，{name}的处方量稳步上行。' },
+    { tgt: 'def8', ret: 0.005, weeks: 4, text: '国防预算通过，{name}的订单簿又多了一页。' },
+    { tgt: 'reit8', ret: 0.006, weeks: 5, text: '低利率把房贷成本压到最低，{name}的新盘开盘即售罄。' },
+    { tgt: 'val8', ret: 0.005, weeks: 4, text: '{name}被点名——一份研报终于承认："旧经济公司的现金流，也是现金流。"' },
+    { tgt: 'pet8', ret: -0.009, weeks: 3, text: '账上现金只够五个季度，{name}开始跟投行谈"战略选项"。' },
+    { tgt: 'fib8', ret: -0.008, weeks: 4, text: '运营商宣布砍掉一半资本开支，{name}的排产表空了一半。' },
+    { tgt: 'val8', ret: -0.003, weeks: 4, text: '没人愿意买"旧经济"，{name}的分红率已经到 5%，股价还是不动。' },
+    { tgt: 'drg8', ret: -0.006, weeks: 5, text: '仿制药竞争提前到来，{name}的王牌药价被砍了三成。' },
+    { tgt: 'def8', ret: -0.005, weeks: 4, text: '一个采购案被审计署盯上，{name}的合同要重新谈。' },
+    { tgt: 'reit8', ret: -0.005, weeks: 4, text: '利率开始上行，{name}的月供负担压得购房者皱眉。' },
+    { tgt: 'all', ret: -0.003, weeks: 3, text: '监管机构开始调查"分析师利益冲突"，研报的推荐突然都变谨慎了。' },
+    { tgt: 'all', ret: -0.004, weeks: 3, text: '破产的互联网公司在交易所门口排成一列，收盘的钟还是要敲。' }
   ]
 });
 
@@ -982,6 +1127,24 @@ D.chapters.push({
       { src: 'shoeshine', text: '次贷经纪人坦白："先生，我的房子首付是零。"' },
       { src: 'paperboy', text: '号外：央行救市！' },
       { src: 'oracle', text: '专栏："危机来临时流动性是氧气——谁先断气，谁先卖资产。"' }
+    ],
+
+    // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+    smallNews: [
+      { tgt: 'ib9', ret: 0.006, weeks: 4, text: '投行的杠杆率报到 30 倍，{name}还在涨——财报电话会上没人觉得这是个问题。' },
+      { tgt: 'mort9', ret: 0.007, weeks: 4, text: '次级贷款打包成债券卖到了欧洲，{name}的发行量又创新高。' },
+      { tgt: 'builder9', ret: 0.007, weeks: 4, text: '新盘开盘当天卖光，{name}加价拿下了下一块地。' },
+      { tgt: 'tech9', ret: 0.007, weeks: 5, text: '新款播放器上市首周破百万台，{name}的门店排队排到商场门口。' },
+      { tgt: 'gold9', ret: 0.006, weeks: 5, text: '金价站上历史高位，{name}的矿场加班加点。' },
+      { tgt: 'disc9', ret: 0.005, weeks: 4, text: '油价涨到四美元一加仑，{name}的客流反而多了两成。' },
+      { tgt: 'ib9', ret: -0.008, weeks: 3, text: '{name}的融资成本悄悄抬升：几家对冲基金开始拒收某些抵押债券作质押。' },
+      { tgt: 'mort9', ret: -0.008, weeks: 4, text: '一批房贷的逾期率悄然翻倍，{name}悄悄提高了拨备。' },
+      { tgt: 'builder9', ret: -0.007, weeks: 4, text: '待售库存创下新高，{name}开始送装修、送车、送现金。' },
+      { tgt: 'tech9', ret: -0.006, weeks: 3, text: '供应链一处工厂停产，{name}的新品发布被迫延期。' },
+      { tgt: 'gold9', ret: -0.006, weeks: 4, text: '金价冲高后急速回落，{name}的边际成本被推到盈亏线上。' },
+      { tgt: 'disc9', ret: -0.005, weeks: 4, text: '租金和人工一起涨，{name}的单店利润被挤压。' },
+      { tgt: 'all', ret: -0.005, weeks: 4, text: '一个叫"次贷"的词从专业版面挪到了头版，只用了三周。' },
+      { tgt: 'all', ret: 0.004, weeks: 3, text: '央行和财政部连夜开会，出来时只说了一句"情况可控"。' }
     ]
 });
 
@@ -1067,6 +1230,24 @@ D.chapters.push({
       { src: 'oracle', text: '老股民："牛市不是让人赚钱的，是让人放松警惕的。"' },
       { src: 'paperboy', text: '财经APP推送：央行又降息了！' },
       { src: 'oracle', text: '专栏："波动率被压到冰点——安静，往往是大雨前的安静。"' }
+    ],
+
+    // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+    smallNews: [
+      { tgt: 'faa10', ret: 0.007, weeks: 5, text: '{name}的现金堆成了山——一款手机的单季销量抵得上一个小国的 GDP。' },
+      { tgt: 'chip10', ret: 0.007, weeks: 5, text: '一家手机厂包下了{name}的全部先进产能，排期到明年下半年。' },
+      { tgt: 'sol10', ret: 0.006, weeks: 4, text: '光伏组件成本又降两成，{name}的装机量同比翻倍。' },
+      { tgt: 'bio10', ret: 0.008, weeks: 3, text: '一项免疫疗法数据在年会上引爆，{name}的股价一天涨了 18%。' },
+      { tgt: 'bank10', ret: 0.005, weeks: 5, text: '压力测试全过，{name}获准回购并提高分红。' },
+      { tgt: 'burg10', ret: 0.005, weeks: 4, text: '外卖平台把门店单量顶上去，{name}的同店销售连涨十一个季度。' },
+      { tgt: 'faa10', ret: -0.005, weeks: 4, text: '监管就"隐私与垄断"开出罚单，{name}的律师团队连夜扩编。' },
+      { tgt: 'chip10', ret: -0.007, weeks: 3, text: '一处晶圆厂因地震停产，{name}的交期集体延后。' },
+      { tgt: 'sol10', ret: -0.006, weeks: 4, text: '补贴退坡的草案流出，{name}的订单在两个月内被推迟。' },
+      { tgt: 'bio10', ret: -0.009, weeks: 3, text: '一项三期临床未达主要终点，{name}的管线估值被砍。' },
+      { tgt: 'bank10', ret: -0.005, weeks: 4, text: '利率曲线走平，{name}的净息差被压到十年最低。' },
+      { tgt: 'burg10', ret: -0.005, weeks: 3, text: '一场食品安全舆情，{name}的公关部连开三天会。' },
+      { tgt: 'all', ret: 0.004, weeks: 4, text: '被动指数基金的规模第一次超过主动，市场越来越像一台机器。' },
+      { tgt: 'all', ret: 0.003, weeks: 3, text: '"逢跌买入"成了信仰，每一次回调都在三小时内被买回去。' }
     ]
 });
 
@@ -1176,6 +1357,24 @@ D.chapters.push({
       { src: 'paperboy', text: '算法推送：机器人又抢了一个工作岗位！' },
       { src: 'paperboy', text: '算法推送：AI 公司估值再创新高！' },
       { src: 'oracle', text: '专栏："预测泡沫顶的人已错了三年；押它不破的人正赢麻了。"' }
+    ],
+
+    // 市场快讯池（非致命小新闻：只推单只股票或全市场的温和漂移，不暂停时间）
+    smallNews: [
+      { tgt: 'ai11', ret: 0.009, weeks: 5, text: '{name}的机柜排产到两年后——一家云厂商把全年资本开支上调了一倍。' },
+      { tgt: 'llm11', ret: 0.008, weeks: 4, text: '{name}的估值一周被上调两成——新一代模型在基准测试上又超了一截。' },
+      { tgt: 'ev11', ret: 0.007, weeks: 5, text: '电池成本跌破每千瓦时一百美元，{name}的车型再次降价。' },
+      { tgt: 'cex11', ret: 0.008, weeks: 4, text: '加密资产重回历史高位，{name}的日交易量创下新纪录。' },
+      { tgt: 'semi11', ret: 0.007, weeks: 5, text: '光刻机订单排到三年后，{name}的产能被全球抢订。' },
+      { tgt: 'oil11', ret: 0.006, weeks: 4, text: '一场地缘冲突推高油价，{name}的现金流又厚了一层。' },
+      { tgt: 'ai11', ret: -0.006, weeks: 3, text: '一处数据中心因散热故障停机，{name}的交付承诺被质疑。' },
+      { tgt: 'llm11', ret: -0.007, weeks: 4, text: '{name}的毛利被重新审视——一篇论文指出模型推理成本被普遍低估。' },
+      { tgt: 'ev11', ret: -0.007, weeks: 5, text: '价格战全面开打，{name}的单车利润被压到近年最低。' },
+      { tgt: 'cex11', ret: -0.008, weeks: 4, text: '一家交易平台被监管起诉，{name}也没能幸免——整个板块跟着熄火。' },
+      { tgt: 'semi11', ret: -0.007, weeks: 4, text: '出口管制新增一条清单，{name}的一部分订单要重新申请许可。' },
+      { tgt: 'oil11', ret: -0.005, weeks: 5, text: '新能源替代加速，{name}的长期需求预测被下调。' },
+      { tgt: 'all', ret: 0.005, weeks: 4, text: '"算力就是新石油"成了口头禅，连卖服务器的公司都在改名字。' },
+      { tgt: 'all', ret: -0.003, weeks: 3, text: '降息预期反复横跳，市场一周内把同一份数据读出了两种结论。' }
     ]
 });
 

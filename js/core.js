@@ -205,7 +205,9 @@ Core.newRun = function (chapterId, seed, daily) {
 
 Core.pushFeed = function (s, item) {
   s.feed.push({ w: s.week, src: item.src, text: item.text });
-  if (s.feed.length > 40) s.feed.splice(0, s.feed.length - 40);
+  // 上限 120：快讯（smallNews）加入后，单局消息实测 71–107 条（70 局样本，均值 88），
+  // 80 会让一半以上的局丢掉开局段的历史；120 刚好装下整章，存档只多约 3KB
+  if (s.feed.length > 120) s.feed.splice(0, s.feed.length - 120);
 };
 
 // 风声预告：黑天鹅落地前 2 周的一条模糊线报。不剧透事件本身，只给方向与板块，
@@ -326,8 +328,23 @@ Core.tickWeek = function (s) {
       Core.pushFeed(s, { src: 'paperboy', text: ev.headline });
     }
   } else {
-    // 随机小事件（章节未配置则用共享池）
-    if (s.week > 45 && r() < 0.035) {
+    // 快讯（小新闻）：非致命、不暂停时间的背景消息，只推单只股票（或全市场）的温和漂移
+    // 定位：364 周里约 65% 是空转周，这些条目把"这只最近为什么强/弱"填上可读的因果
+    var snPool = ch.smallNews || D.smallNews || [];
+    if (snPool.length && s.week > 20 && r() < 0.12) {
+      if (!s.snSeen) s.snSeen = [];
+      var snPick = Math.floor(r() * snPool.length), snTry = 0;
+      while (snTry++ < 5 && s.snSeen.indexOf(snPick) >= 0) snPick = Math.floor(r() * snPool.length);
+      s.snSeen.push(snPick);
+      if (s.snSeen.length > 8) s.snSeen.shift();
+      var snEv = snPool[snPick];
+      var snTgt = snEv.tgt || 'all';
+      var snObj = snTgt === 'all' ? { name: ch.indexName } : (Core.stock(ch, snTgt) || { name: snTgt });
+      Core.pushFeed(s, { src: 'ticker',
+        text: String(snEv.text).split('{name}').join(snObj.name) });
+      driftsNew.push({ id: snTgt, ret: snEv.ret * (0.75 + r() * 0.5), left: snEv.weeks || 4 });
+    } else if (s.week > 45 && r() < 0.035) {
+      // 随机小事件（章节未配置则用共享池）
       var pool = ch.randomEvents || D.randomEvents || [];
       var re = pool[Math.floor(r() * pool.length)];
       var tgt = 'all';
@@ -602,6 +619,8 @@ Core.ensureFields = function (s) {
   if (!s.verdicts) s.verdicts = [];
   if (!s.srcScore) s.srcScore = {};
   if (!s.lastNews) s.lastNews = [];
+  if (!s.snSeen) s.snSeen = [];
+  if (s.feedRead === undefined) s.feedRead = s.feed ? s.feed.length : 0;
   if (s.stats.loanEver === undefined) s.stats.loanEver = 0;
   if (s.stats.dodgeCount === undefined) s.stats.dodgeCount = 0;
   if (!s.tradesLog) s.tradesLog = [];

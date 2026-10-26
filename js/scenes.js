@@ -228,6 +228,7 @@ var Scenes = {
       return;
     }
     if (this.current === SelectScene && SelectScene.codexOpen) { SelectScene.codexScrollBy(dy); return; }
+    if (this.current === SelectScene && SelectScene.helpOpen) { SelectScene.helpScrollBy(dy); return; }
     if (this.current === SelectScene && !SelectScene.helpOpen) {
       SelectScene.scrollBy(dy);
     }
@@ -423,6 +424,7 @@ var HELP_LINES = [
   '【杠杆】借款上限 = 净值，周息 0.35%（复利计入贷款）。放大收益，也放大亏损。',
   '【风险度】= 净值 ÷ 总敞口。低于 30% 触发追保警告，低于 22% 强制平仓（含 5% 滑点）。',
   '【黑天鹅】留意消息来源的可信度——1929 年，连教授都会骗你。',
+  '【快讯】青色「市场快讯」是背景消息：不暂停时间，只让某只股票强或弱上几周，行情走得不合常理时多半是它。',
   '【挂单】持仓后可在「挂单管理」挂止损/止盈，触发即市价全平；买入时也可同挂止损。',
   '【预言】带"下周 / 即将"字样的消息会登记预言，到期判定应验或落空；消息记录页顶部可查各来源本局战绩。',
   '【指数】工业平均指数 = 六股等权组合，可在"指数"页签直接买卖（波动约为个股平均）；结算页会判定你是否跑赢大盘。',
@@ -435,6 +437,7 @@ var SelectScene = {
   meta: null,
   run: null,
   helpOpen: false,
+  helpScroll: 0,
   codexOpen: false,
   codexTab: 'swan',
   codexSel: null,
@@ -452,6 +455,7 @@ var SelectScene = {
     this.meta = all.meta;
     this.run = (all.run && all.run.phase === 'play') ? all.run : null;
     this.helpOpen = false;
+    this.helpScroll = 0;
     this.codexOpen = false;
     this.dailyOpen = false;
     this.scrollY = 0;
@@ -508,6 +512,7 @@ var SelectScene = {
   touchStart: function (x, y) {
     if (y > 196) this._dragY = { y: y, sy: this.scrollY };
     if (this.codexOpen && y > 92 && y < Platform.H - 66) this._codexDrag = { y: y, sy: this.codexScroll };
+    if (this.helpOpen) this._helpDrag = { y: y, sy: this.helpScroll };
   },
   touchMove: function (x, y) {
     if (this._dragY) {
@@ -518,11 +523,18 @@ var SelectScene = {
       var maxC = Math.max(0, this._codexContentH() - (Platform.H - 92 - 70));
       this.codexScroll = Math.max(0, Math.min(maxC, this._codexDrag.sy + (this._codexDrag.y - y)));
     }
+    if (this._helpDrag) {
+      var maxH2 = this._helpMaxScroll();
+      this.helpScroll = Math.max(0, Math.min(maxH2, this._helpDrag.sy + (this._helpDrag.y - y)));
+    }
   },
-  touchEnd: function () { this._dragY = null; this._codexDrag = null; },
+  touchEnd: function () { this._dragY = null; this._codexDrag = null; this._helpDrag = null; },
   scrollBy: function (dy) {
     var maxS = Math.max(0, this._contentH() - (Platform.H - 202 - 44));
     this.scrollY = Math.max(0, Math.min(maxS, this.scrollY + dy));
+  },
+  helpScrollBy: function (dy) {
+    this.helpScroll = Math.max(0, Math.min(this._helpMaxScroll(), this.helpScroll + dy));
   },
   codexScrollBy: function (dy) {
     var maxC = Math.max(0, this._codexContentH() - (Platform.H - 92 - 70));
@@ -788,15 +800,49 @@ var SelectScene = {
     ctx.fillStyle = C.backdropHeavy;
     ctx.fillRect(0, 0, W, H);
     UI.text(ctx, '玩法说明', W / 2, 44, { size: 18, color: C.gold, align: 'center', bold: true });
-    var y = 78;
+    // 矮窗（拖到 586 及以下）时整页装不下：内容区裁剪 + 可拖动滚动，按钮固定在底部
+    var vp = this._helpView(), top = vp.top, viewH = vp.viewH;
+    var maxS = this._helpMaxScroll();
+    if (this.helpScroll > maxS) this.helpScroll = maxS;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, top, W, viewH);
+    ctx.clip();
+    var y = 78 - this.helpScroll;
     for (var i = 0; i < HELP_LINES.length; i++) {
       var lines = wrap(ctx, HELP_LINES[i], W - 64, 11.5);
-      UI.lines(ctx, lines, 32, y, 17, { size: 11.5, color: i === 0 || HELP_LINES[i].indexOf('【') === 0 ? C.text : C.sub });
       y += lines.length * 17 + 8;
+      if (y < top - 20) continue;                  // 已滚出视口上方的整条跳过
+      UI.lines(ctx, lines, 32, y - (lines.length * 17 + 8), 17,
+        { size: 11.5, color: i === 0 || HELP_LINES[i].indexOf('【') === 0 ? C.text : C.sub });
+    }
+    ctx.restore();
+    if (maxS > 0) {
+      var barH = Math.max(30, viewH * viewH / this._helpContentH());
+      var barY = top + (viewH - barH) * (this.helpScroll / maxS);
+      UI.roundRect(ctx, W - 6, barY, 3, barH, 1.5, C.dim);
+      UI.text(ctx, '可上下拖动', W / 2, H - 64, { size: 9.5, color: C.dim, align: 'center' });
     }
     var btn = UI.button(W / 2 - 70, H - 50, 140, 36, '明白', { bg: '#0e7490', size: 14 });
     btn.onTap = function () { SelectScene.helpOpen = false; };
     btn.draw(ctx); Scenes.buttons.push(btn);
+  },
+
+  // 帮助面板的视口（顶部留标题、底部留提示与按钮）
+  _helpView: function () {
+    var top = 64;
+    return { top: top, viewH: Math.max(60, Platform.H - 76 - top) };
+  },
+  _helpContentH: function () {
+    var ctx = Platform.ctx, W = Platform.W, h = 0;
+    if (!ctx) return 0;
+    for (var i = 0; i < HELP_LINES.length; i++) {
+      h += wrap(ctx, HELP_LINES[i], W - 64, 11.5).length * 17 + 8;
+    }
+    return h + 14;
+  },
+  _helpMaxScroll: function () {
+    return Math.max(0, this._helpContentH() - this._helpView().viewH);
   },
 
   // —— 图鉴 · 成就 ——
@@ -1179,7 +1225,7 @@ var GameScene = {
     var nb = UI.button(12, newsY, W - 24, 34, '', { bg: C.panel, border: pausedNews ? C.gold : C.border });
     nb.draw(ctx); Scenes.buttons.push(nb);
     ctx.globalAlpha = 1;
-    nb.onTap = function () { s.modal = { type: 'feed' }; };
+    nb.onTap = function () { s.modal = { type: 'feed' }; s.feedRead = s.feed.length; };
     if (latest) {
       var src = srcOf(ch, latest.src);
       UI.roundRect(ctx, 18, newsY + 6, 58, 22, 5, src.color);
@@ -1191,7 +1237,14 @@ var GameScene = {
         resume.onTap = function () { s.autoPaused = false; };
         resume.draw(ctx); Scenes.buttons.push(resume);
       } else {
-        UI.text(ctx, '记录 ▸', W - 26, newsY + 17, { size: 10, color: C.dim, align: 'right' });
+        // 快进档下横幅只停留一两百毫秒，用未读数兜住"刚才好像有条消息"的漏读
+        var unread = s.feed.length - (s.feedRead === undefined ? s.feed.length : s.feedRead);
+        if (unread > 0) {
+          UI.text(ctx, '新 ' + (unread > 99 ? '99+' : unread) + ' 条 ▸', W - 26, newsY + 17,
+            { size: 10, color: C.gold, align: 'right', bold: true });
+        } else {
+          UI.text(ctx, '记录 ▸', W - 26, newsY + 17, { size: 10, color: C.dim, align: 'right' });
+        }
       }
     }
 
