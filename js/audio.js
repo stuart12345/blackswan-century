@@ -468,10 +468,11 @@ var AudioSys = {
   unlock: function () {
     this.init();
     if (!this.ctx) return;
+    var self = this;
     try {
       if (this.ctx.state === 'suspended' && this.ctx.resume) this.ctx.resume();
     } catch (e) { /* 忽略 */ }
-    // iOS 保险：部分版本仅 resume 不够，需在手势内播放静音缓冲才能解锁输出
+    // iOS 保险：手势内播放真实短音（静音缓冲不够的老版本），并持续重试 resume
     try {
       if (this.ctx.state !== 'running') {
         var ub = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
@@ -480,6 +481,22 @@ var AudioSys = {
         us.connect(this.ctx.destination);
         us.start(0);
       }
+      var blip = this.ctx.createOscillator();
+      var bg2 = this.ctx.createGain();
+      blip.frequency.value = 660;
+      bg2.gain.value = 0.06;
+      blip.connect(bg2);
+      bg2.connect(this.master || this.ctx.destination);
+      blip.start(0);
+      blip.stop(this.ctx.currentTime + 0.05);
+      var tries = 0;
+      var rr = setInterval(function () {
+        tries++;
+        if (!self.ctx) { clearInterval(rr); return; }
+        if (self.ctx.state !== 'running' && self.ctx.resume) { try { self.ctx.resume(); } catch (e3) {} }
+        else clearInterval(rr);
+        if (tries > 12) clearInterval(rr);
+      }, 400);
     } catch (e2) { /* 忽略 */ }
     // 资产 BGM 优先；文件缺失/解码失败由 playAsset 内部回退程序化
     this._loadAssets();

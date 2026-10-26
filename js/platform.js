@@ -78,6 +78,10 @@ Platform.init = function () {
       var t = e.changedTouches[0];
       var r = canvas.getBoundingClientRect();
       self2.onTouch && self2.onTouch.end(t.clientX - r.left, t.clientY - r.top);
+      // iOS 顽固挂起：每次抬指都补一次解锁（ctx 未 running 时）
+      try {
+        if (G.AudioSys && (!G.AudioSys.ctx || G.AudioSys.ctx.state !== 'running')) G.AudioSys.unlock();
+      } catch (e2) { /* 忽略 */ }
     }, { passive: false });
     // 滚轮：桌面端列表滚动（passive:false 以阻止页面连带滚动）
     canvas.addEventListener('wheel', function (e) {
