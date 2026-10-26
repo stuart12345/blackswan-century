@@ -140,6 +140,35 @@ Platform.createOffscreen = function (w, h) {
 };
 
 // ---------- 战绩卡（离屏画布 → 下载/分享） ----------
+// 触摸设备与微信内置浏览器不支持 a[download]（点击无反应或整页跳转），改为贴图覆盖层 + 长按保存
+function showCardOverlay(url) {
+  var old = document.getElementById('bs-card-ov');
+  if (old && old.parentNode) old.parentNode.removeChild(old);
+  var ov = document.createElement('div');
+  ov.id = 'bs-card-ov';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(4,8,18,0.93);display:flex;' +
+    'flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+  var img = document.createElement('img');
+  img.src = url;
+  img.alt = '战绩卡';
+  img.style.cssText = 'max-width:100%;max-height:72vh;border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,0.65);';
+  var tip = document.createElement('div');
+  tip.textContent = '长按图片 → 保存到相册';
+  tip.style.cssText = 'margin-top:16px;color:#f5d06f;font-size:15px;letter-spacing:1px;' +
+    'font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;';
+  var sub = document.createElement('div');
+  sub.textContent = '微信 / iOS / 安卓长按均可保存，也可直接截图';
+  sub.style.cssText = 'margin-top:7px;color:#93a4c3;font-size:12px;' +
+    'font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;';
+  var btn = document.createElement('button');
+  btn.textContent = '关闭';
+  btn.style.cssText = 'margin-top:18px;padding:9px 32px;border:1px solid #3b4a66;border-radius:8px;' +
+    'background:#141c2e;color:#dbe6ff;font-size:14px;font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;';
+  btn.onclick = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+  ov.appendChild(img); ov.appendChild(tip); ov.appendChild(sub); ov.appendChild(btn);
+  document.body.appendChild(ov);
+}
+
 Platform.saveCard = function (canvas, title) {
   if (this.isWechat) {
     try {
@@ -153,15 +182,21 @@ Platform.saveCard = function (canvas, title) {
     } catch (e) { Platform.share(title); }
     return;
   }
+  var url;
+  try { url = canvas.toDataURL('image/png'); } catch (e) { console.log('[card] 生成失败', e); return; }
+  // 触摸设备 / 微信内置浏览器：走覆盖层长按保存
+  var touch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) ||
+              /MicroMessenger/i.test(navigator.userAgent || '');
+  if (touch) { showCardOverlay(url); return; }
+  // 桌面：直接下载
   try {
-    var url = canvas.toDataURL('image/png');
     var a = document.createElement('a');
     a.href = url;
     a.download = '黑天鹅世纪-战绩卡.png';
     document.body.appendChild(a);
     a.click();
     a.remove();
-  } catch (e) { console.log('[card] 保存失败', e); }
+  } catch (e2) { console.log('[card] 保存失败', e2); showCardOverlay(url); }
 };
 
 // ---------- 轻量设置存取（主题等） ----------

@@ -135,7 +135,7 @@ var Scenes = {
     var W = Platform.W, H = Platform.H;
     ctx.fillStyle = 'rgba(0,0,0,0.93)';
     ctx.fillRect(0, 0, W, H);
-    UI.text(ctx, '广告播放中（Mock）', W / 2, H / 2 - 50, { size: 18, color: C.gold, align: 'center', bold: true });
+    UI.text(ctx, '赞助商时段', W / 2, H / 2 - 50, { size: 18, color: C.gold, align: 'center', bold: true });
     UI.progressBar(ctx, W / 2 - 80, H / 2 - 10, 160, 12, 1 - this.mockAd.t / 3000, '#101a33', C.gold);
     UI.text(ctx, Math.ceil(this.mockAd.t / 1000) + 's', W / 2, H / 2 + 36, { size: 14, color: C.sub, align: 'center' });
   },
@@ -606,7 +606,7 @@ var SelectScene = {
       UI.roundRect(ctx, W - 6, barY, 3, barH, 1.5, C.dim);
     }
 
-    UI.text(ctx, '本游戏为虚构历史模拟，不构成任何投资建议 · 广告为 Mock', W / 2, H - 30,
+    UI.text(ctx, '本游戏为虚构历史模拟，不构成任何投资建议', W / 2, H - 30,
       { size: 9.5, color: C.dim, align: 'center' });
     UI.text(ctx, '音乐：theojt · John Bartmann · Scott Joplin（公有领域录音）', W / 2, H - 14,
       { size: 9, color: C.dim, align: 'center' });
@@ -1827,7 +1827,10 @@ var GameScene = {
       makeBattleCard(s, ch, beat, nwChg, idxChg);
     };
     shareB.draw(ctx); Scenes.buttons.push(shareB);
-    var ad = UI.button(24 + (bw + 10) * 3, py + 444, bw, 40, '看广告 +1★', { bg: '#78350f', size: 11.5, disabled: s.result.stars >= 3 });
+    // Mock 模式（USE_REAL_AD=false）下没有真广告，文案不能写"看广告"，否则玩家以为是坏按钮
+    var isMockAd = Platform.rewardedMode() !== 'real';
+    var ad = UI.button(24 + (bw + 10) * 3, py + 444, bw, 40, isMockAd ? '免费 +1★' : '看广告 +1★',
+      { bg: '#78350f', size: 11.5, disabled: s.result.stars >= 3 });
     ad.onTap = function () {
       watchAd(function () {
         s.result.stars = Math.min(3, s.result.stars + 1);
@@ -1861,7 +1864,9 @@ var GameScene = {
 
     var bw = (W - 48 - 16) / 3;
     if (!s.usedRevive && !s.daily) {
-      var reviveBtn = UI.button(W / 2 - 90, py + 196, 180, 44, '看广告 · 半价复活', { bg: '#78350f', size: 14 });
+      var mockAd = Platform.rewardedMode() !== 'real';
+      var reviveBtn = UI.button(W / 2 - 90, py + 196, 180, 44, mockAd ? '半价复活 · 再来一次' : '看广告 · 半价复活',
+        { bg: '#78350f', size: 14 });
       reviveBtn.onTap = function () {
         watchAd(function () { Core.revive(s); GameScene.brokeQuote = null; });
       };
