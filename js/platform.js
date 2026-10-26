@@ -109,6 +109,91 @@ Platform.share = function (title) {
   }
 };
 
+// ---------- URL 参数（分享链接直达章节 / 带成绩传播） ----------
+// 浏览器读 location.search；小游戏读启动参数（转发卡片携带的 query）。
+// 只读一次并缓存：游戏中不再变，且小游戏的启动参数本就只在冷启时有值。
+Platform.query = function () {
+  if (this._q) return this._q;
+  var q = {}, i, parts, kv;
+  if (this.isWechat) {
+    try {
+      var lo = (wx.getEnterOptionsSync && wx.getEnterOptionsSync()) ||
+               (wx.getLaunchOptionsSync && wx.getLaunchOptionsSync()) || {};
+      q = lo.query || {};
+    } catch (e) { q = {}; }
+  } else if (typeof location !== 'undefined' && location.search) {
+    parts = String(location.search).replace(/^\?/, '').split('&');
+    for (i = 0; i < parts.length; i++) {
+      if (!parts[i]) continue;
+      kv = parts[i].split('=');
+      if (!kv[0]) continue;
+      try {
+        q[decodeURIComponent(kv[0])] = decodeURIComponent((kv[1] || '').replace(/\+/g, ' '));
+      } catch (e2) { q[kv[0]] = kv[1] || ''; }
+    }
+  }
+  this._q = q;
+  return q;
+};
+
+// 拼分享链接：取当前 URL 去掉 ?# 的部分再挂参数（file:// 与 http 同样适用）
+Platform.shareUrl = function (params) {
+  var base = '', ps = [], k, v;
+  try {
+    if (this.isWechat) return '';
+    base = String(location.href).split('#')[0].split('?')[0];
+  } catch (e) { return ''; }
+  for (k in params) {
+    if (!params.hasOwnProperty(k)) continue;
+    v = params[k];
+    // 0 一并跳过：在本游戏的分享参数里 0 表示"没有成绩/没有星级"，拼进去只会让链接更长
+    if (v === undefined || v === null || v === '' || v === 0) continue;
+    ps.push(encodeURIComponent(k) + '=' + encodeURIComponent(v));
+  }
+  return ps.length ? base + '?' + ps.join('&') : base;
+};
+
+// 复制文本：callback(ok)。优先 Clipboard API，失败退 textarea + execCommand（老浏览器 / 非安全上下文）
+Platform.copyText = function (text, onDone) {
+  var done = function (ok) { onDone && onDone(!!ok); };
+  var fallback = function () {
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:-2000px;left:-2000px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      var ok = document.execCommand && document.execCommand('copy');
+      ta.remove();
+      return !!ok;
+    } catch (e) { return false; }
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(fallback()); });
+      return;
+    }
+  } catch (e) { /* 落到兜底 */ }
+  done(fallback());
+};
+
+// 轻量提示条（2.6 秒自动消失）：桌面端用于告知"链接已复制"，不打断操作
+Platform.toast = function (msg) {
+  if (this.isWechat || typeof document === 'undefined') { console.log('[toast] ' + msg); return; }
+  var old = document.getElementById('bs-toast');
+  if (old && old.parentNode) old.parentNode.removeChild(old);
+  var d = document.createElement('div');
+  d.id = 'bs-toast';
+  d.textContent = msg;
+  d.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:10000;' +
+    'max-width:86vw;padding:10px 18px;border-radius:20px;background:rgba(12,20,36,0.94);' +
+    'border:1px solid #3b4a66;color:#e6edff;font-size:13px;line-height:1.5;text-align:center;' +
+    'box-shadow:0 8px 28px rgba(0,0,0,0.55);font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;';
+  document.body.appendChild(d);
+  setTimeout(function () { if (d.parentNode) d.parentNode.removeChild(d); }, 2600);
+};
+
 // ---------- 激励视频 ----------
 
 // W1 阶段：USE_REAL_AD=false，所有广告位走 Mock（3 秒模拟播放后发奖）。
@@ -147,17 +232,18 @@ Platform.createOffscreen = function (w, h) {
 
 // ---------- 战绩卡（离屏画布 → 下载/分享） ----------
 // 触摸设备与微信内置浏览器不支持 a[download]（点击无反应或整页跳转），改为贴图覆盖层 + 长按保存
-function showCardOverlay(url) {
+function showCardOverlay(url, shareUrl) {
   var old = document.getElementById('bs-card-ov');
   if (old && old.parentNode) old.parentNode.removeChild(old);
   var ov = document.createElement('div');
   ov.id = 'bs-card-ov';
   ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(4,8,18,0.93);display:flex;' +
-    'flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    'flex-direction:column;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;' +
+    'overflow:auto;';
   var img = document.createElement('img');
   img.src = url;
   img.alt = '战绩卡';
-  img.style.cssText = 'max-width:100%;max-height:72vh;border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,0.65);';
+  img.style.cssText = 'max-width:100%;max-height:68vh;border-radius:10px;box-shadow:0 14px 44px rgba(0,0,0,0.65);';
   var tip = document.createElement('div');
   tip.textContent = '长按图片 → 保存到相册';
   tip.style.cssText = 'margin-top:16px;color:#f5d06f;font-size:15px;letter-spacing:1px;' +
@@ -166,22 +252,49 @@ function showCardOverlay(url) {
   sub.textContent = '微信 / iOS / 安卓长按均可保存，也可直接截图';
   sub.style.cssText = 'margin-top:7px;color:#93a4c3;font-size:12px;' +
     'font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;';
+  ov.appendChild(img); ov.appendChild(tip); ov.appendChild(sub);
+
+  // 挑战链接：对方点开即进入同章同盘，且能看到你的成绩
+  if (shareUrl) {
+    var cp = document.createElement('button');
+    cp.textContent = '复制挑战链接';
+    cp.style.cssText = 'margin-top:14px;padding:10px 30px;border:none;border-radius:8px;background:#2563eb;' +
+      'color:#fff;font-size:14px;font-weight:600;font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;';
+    cp.onclick = function () {
+      Platform.copyText(shareUrl, function (ok) {
+        cp.textContent = ok ? '✓ 已复制，粘贴发给朋友' : '复制失败，请长按下方链接';
+        if (ok) setTimeout(function () { cp.textContent = '复制挑战链接'; }, 2600);
+      });
+    };
+    var lk = document.createElement('div');
+    lk.textContent = shareUrl;
+    lk.style.cssText = 'margin-top:10px;max-width:92vw;word-break:break-all;' +
+      'color:#5f7291;font-size:11px;line-height:1.45;text-align:center;-webkit-user-select:text;' +
+      'user-select:text;font-family:system-ui,-apple-system,sans-serif;';
+    ov.appendChild(cp); ov.appendChild(lk);
+  }
+
   var btn = document.createElement('button');
   btn.textContent = '关闭';
-  btn.style.cssText = 'margin-top:18px;padding:9px 32px;border:1px solid #3b4a66;border-radius:8px;' +
+  btn.style.cssText = 'margin-top:16px;padding:9px 32px;border:1px solid #3b4a66;border-radius:8px;' +
     'background:#141c2e;color:#dbe6ff;font-size:14px;font-family:system-ui,-apple-system,"Microsoft YaHei",sans-serif;';
   btn.onclick = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
-  ov.appendChild(img); ov.appendChild(tip); ov.appendChild(sub); ov.appendChild(btn);
+  ov.appendChild(btn);
   document.body.appendChild(ov);
 }
 
-Platform.saveCard = function (canvas, title) {
+// share（可选）= { url: 浏览器可复制的完整链接, query: 小游戏转发携带的参数串 }
+Platform.saveCard = function (canvas, title, share) {
+  var surl = (share && share.url) || '';
   if (this.isWechat) {
     try {
       wx.canvasToTempFilePath({
         canvas: canvas,
         success: function (res) {
-          wx.shareAppMessage && wx.shareAppMessage({ title: title, imageUrl: res.tempFilePath });
+          if (!wx.shareAppMessage) return;
+          var opt = { title: title, imageUrl: res.tempFilePath };
+          if (share && share.query) opt.query = share.query;   // 对方点卡片即同章同盘
+          wx.shareAppMessage(opt);
         },
         fail: function () { /* 转发兜底纯文本 */ Platform.share(title); }
       });
@@ -193,8 +306,8 @@ Platform.saveCard = function (canvas, title) {
   // 触摸设备 / 微信内置浏览器：走覆盖层长按保存
   var touch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) ||
               /MicroMessenger/i.test(navigator.userAgent || '');
-  if (touch) { showCardOverlay(url); return; }
-  // 桌面：直接下载
+  if (touch) { showCardOverlay(url, surl); return; }
+  // 桌面：直接下载 PNG，同时把挑战链接放进剪贴板并提示（不打断下载习惯）
   try {
     var a = document.createElement('a');
     a.href = url;
@@ -202,7 +315,13 @@ Platform.saveCard = function (canvas, title) {
     document.body.appendChild(a);
     a.click();
     a.remove();
-  } catch (e2) { console.log('[card] 保存失败', e2); showCardOverlay(url); }
+    if (surl) {
+      Platform.copyText(surl, function (ok) {
+        Platform.toast(ok ? '战绩卡已下载 · 挑战链接已复制，粘贴发给朋友'
+                          : '战绩卡已下载 · 挑战链接复制失败，可到战绩卡面板手动复制');
+      });
+    }
+  } catch (e2) { console.log('[card] 保存失败', e2); showCardOverlay(url, surl); }
 };
 
 // ---------- 轻量设置存取（主题等） ----------

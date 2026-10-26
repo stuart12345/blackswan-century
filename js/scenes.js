@@ -442,6 +442,8 @@ var SelectScene = {
   introShow: null,
   introRects: null,
   dailyOpen: false,
+  invite: null,          // 分享链接邀请：{ch, beat, seed, stars}
+  _inviteRead: false,
   scrollY: 0,
   _dragY: null,
 
@@ -455,7 +457,53 @@ var SelectScene = {
     this.scrollY = 0;
     this.codexScroll = 0;
     if (G.AudioSys && G.AudioSys.playAsset) G.AudioSys.playAsset('menu');
+    this.readInvite();
   },
+
+  // 解析分享链接参数：?ch=c9 直达 / &beat=5200&st=3&seed=84213 带朋友成绩
+  // 无成绩的纯直达且本地没有进行中的局 → 直接开局（零摩擦）；否则弹邀请层，避免覆盖别人的进度
+  // 只处理一次：忽略邀请后在时间轴里来回切换不会反复弹，刷新页面才会重新读 URL
+  readInvite: function () {
+    if (this._inviteRead) return;
+    this._inviteRead = true;
+    this.invite = null;
+    var q = Platform.query ? Platform.query() : {};
+    var rawCh = String(q.ch || '');
+    if (!/^c\d{1,2}$/.test(rawCh)) return;
+    var ich = Core.chapterById ? Core.chapterById(rawCh) : null;
+    if (!ich) return;
+    var b = parseInt(q.beat, 10), sd = parseInt(q.seed, 10), st = parseInt(q.st, 10);
+    this.invite = {
+      ch: ich,
+      beat: (isFinite(b) && b > 0) ? b : 0,
+      seed: (isFinite(sd) && sd > 0) ? sd : 0,
+      stars: (isFinite(st) && st > 0) ? Math.min(3, st) : 0
+    };
+    if (!this.invite.beat && !this.run) this.acceptInvite();
+  },
+
+  acceptInvite: function () {
+    var inv = this.invite;
+    if (!inv) return;
+    this.invite = null;
+    G.state = Core.newRun(inv.ch.id, inv.seed || undefined);
+    // 与 startChapter 一致：首章且未完成教学时启动四步引导
+    if (!Core.loadAll().meta.tutDone && G.state.ch === 'c1' && G.state._tut === undefined) {
+      G.state._tut = 0;
+    }
+    if (Core.pushFeed) {
+      Core.pushFeed(G.state, {
+        src: 'narrator',
+        text: '你从一条挑战链接进入 ' + inv.ch.era + '。' + (inv.beat
+          ? '对方在这一章把 ' + usd(inv.ch.startCash) + ' 做到了 ' + usd(inv.beat) +
+            '，同一盘、同一起点——现在轮到你了。'
+          : '时代已经开场，做出你的选择。')
+      });
+    }
+    Scenes.go(GameScene);
+  },
+
+  dismissInvite: function () { this.invite = null; },
 
   touchStart: function (x, y) {
     if (y > 196) this._dragY = { y: y, sy: this.scrollY };
@@ -626,6 +674,59 @@ var SelectScene = {
       var iok = UI.button(W / 2 - 60, ipy + 168, 120, 36, '收起', { bg: '#0e7490', size: 13 });
       iok.onTap = function () { SelectScene.introShow = null; };
       iok.draw(ctx); Scenes.buttons.push(iok);
+    }
+
+    // 分享链接邀请层（?ch=c9&beat=5200&st=3&seed=84213）：先让来客看见朋友的成绩，再决定要不要打
+    if (this.invite) {
+      Scenes.buttons.length = 0;              // 丢弃底层章节按钮，避免点穿遮罩
+      ctx.fillStyle = C.backdropHeavy;
+      ctx.fillRect(0, 0, W, H);
+      var iv = this.invite, ivCh = iv.ch;
+      var ipw = Math.min(W - 48, 336), ipx = (W - ipw) / 2;
+      var iph = iv.beat ? 330 : 276;
+      var ipy = Math.max(56, H / 2 - iph / 2);
+      var ivIdx = 0, ivI;
+      for (ivI = 0; ivI < D.chapters.length; ivI++) {
+        if (D.chapters[ivI].id === ivCh.id) { ivIdx = ivI; break; }
+      }
+      UI.roundRect(ctx, ipx, ipy, ipw, iph, 14, C.panel, C.gold);
+      UI.text(ctx, iv.beat ? '挑战邀请' : '直达章节', W / 2, ipy + 34,
+        { size: 18, color: C.gold, align: 'center', bold: true });
+      UI.text(ctx, iv.beat ? '有人留下一份成绩，等你来超' : '链接指向这一章',
+        W / 2, ipy + 58, { size: 10.5, color: C.dim, align: 'center' });
+      UI.roundRect(ctx, ipx + 24, ipy + 74, ipw - 48, 1, 0.5, C.border);
+      UI.text(ctx, '第 ' + (ivIdx + 1) + ' 章 · ' + ivCh.era, W / 2, ipy + 98,
+        { size: 11.5, color: C.sub, align: 'center' });
+      UI.textFit(ctx, ivCh.name, W / 2, ipy + 122, ipw - 40,
+        { size: 15, color: C.text, align: 'center', bold: true });
+      if (iv.beat) {
+        var ivStar = '';
+        for (var ivk = 0; ivk < 3; ivk++) ivStar += ivk < iv.stars ? '★' : '☆';
+        UI.text(ctx, '对方成绩 ' + usd(iv.beat) + (iv.stars ? '  ' + ivStar : ''),
+          W / 2, ipy + 152, { size: 13, color: C.gold, align: 'center', bold: true });
+        UI.text(ctx, '相对开局 ' + pctStr(iv.beat / ivCh.startCash - 1) +
+          ' · ' + (iv.seed ? '同一盘、同一起点' : '同一章、各自开局'),
+          W / 2, ipy + 176, { size: 10.5, color: C.sub, align: 'center' });
+        UI.textFit(ctx, '通关线 ' + usd(ivCh.goals.pass) + ' · 三星线 ' + usd(ivCh.goals.s3),
+          W / 2, ipy + 200, ipw - 40, { size: 10.5, color: C.dim, align: 'center' });
+        if (this.run) UI.text(ctx, '开启新局会覆盖进行中的进度', W / 2, ipy + 222,
+          { size: 10, color: C.dim, align: 'center' });
+      } else {
+        UI.text(ctx, '通关线 ' + usd(ivCh.goals.pass) + ' · 三星线 ' + usd(ivCh.goals.s3),
+          W / 2, ipy + 152, { size: 11, color: C.sub, align: 'center' });
+        if (this.run) UI.text(ctx, '开启新局会覆盖进行中的进度', W / 2, ipy + 176,
+          { size: 10, color: C.dim, align: 'center' });
+      }
+      var ibw = (ipw - 48 - 10) / 2, iby = ipy + iph - 62;
+      var iAcc = UI.button(ipx + 24, iby, ibw, 44, iv.beat ? '接受挑战' : '开始这一章',
+        { bg: '#b45309', size: 14 });
+      iAcc.onTap = function () { self.acceptInvite(); };
+      iAcc.draw(ctx); Scenes.buttons.push(iAcc);
+      var iNo = UI.button(ipx + 24 + ibw + 10, iby, ibw, 44, '看看时间轴',
+        { bg: C.panel2, color: C.sub, size: 12.5 });
+      iNo.onTap = function () { self.dismissInvite(); };
+      iNo.draw(ctx); Scenes.buttons.push(iNo);
+      return;
     }
 
     // 每日挑战弹层（同一天全球同一盘；一局定音，无复活）
@@ -1903,9 +2004,11 @@ var GameScene = {
     var home = UI.button(24 + (bw + 10), py + 444, bw, 40, '回到时间轴', { bg: C.panel2, color: C.sub, size: 11.5 });
     home.onTap = function () { G.state = null; Scenes.go(SelectScene); };
     home.draw(ctx); Scenes.buttons.push(home);
+    // 挑战链接：章节 + 成绩 + 星级 + 种子（同一种子＝同一盘，对方成绩才有可比性）
+    var shareQ = { ch: ch.id, beat: Math.round(s.result.nw), st: s.result.stars, seed: s.seed };
     var shareB = UI.button(24 + (bw + 10) * 2, py + 444, bw, 40, '战绩卡 ▣', { bg: '#2563eb', size: 11.5 });
     shareB.onTap = function () {
-      makeBattleCard(s, ch, beat, nwChg, idxChg);
+      makeBattleCard(s, ch, beat, nwChg, idxChg, shareQ);
     };
     shareB.draw(ctx); Scenes.buttons.push(shareB);
     // Mock 模式（USE_REAL_AD=false）下没有真广告，文案不能写"看广告"，否则玩家以为是坏按钮
@@ -1978,7 +2081,7 @@ function dateText(s) {
 function self2Sel(id) { return GameScene.sel === id; }
 
 // 结算战绩卡：离屏合成 430×760 PNG，浏览器直接下载 / 微信转临时文件走分享
-function makeBattleCard(s, ch, beat, nwChg, idxChg) {
+function makeBattleCard(s, ch, beat, nwChg, idxChg, shareQ) {
   var CW2 = 430, CH3 = 760;
   var cv = Platform.createOffscreen(CW2, CH3);
   if (!cv || !cv.getContext) return;
@@ -2036,7 +2139,15 @@ function makeBattleCard(s, ch, beat, nwChg, idxChg) {
   }
   UI.text(x2, '你能在华尔街活过几个时代？', CW2 / 2, CH3 - 64, { size: 12.5, color: '#d7e0f2', align: 'center', bold: true });
   UI.text(x2, '黑天鹅世纪 · 华尔街百年生存模拟', CW2 / 2, CH3 - 40, { size: 10.5, color: '#5a6c92', align: 'center' });
-  Platform.saveCard(cv, '我在《黑天鹅世纪》' + ch.era + ' 把 $1,000 做到 ' + usd(s.result.nw));
+  var share = null;
+  if (shareQ) {
+    share = {
+      query: 'ch=' + shareQ.ch + '&beat=' + shareQ.beat + '&st=' + shareQ.st + '&seed=' + shareQ.seed,
+      url: Platform.shareUrl ? Platform.shareUrl(shareQ) : ''
+    };
+  }
+  Platform.saveCard(cv, '我在《黑天鹅世纪》' + ch.era + ' 把 ' + usd(ch.startCash) +
+    ' 做到 ' + usd(s.result.nw) + '，你敢来同一盘试试吗', share);
 }
 
 // 持仓/挂单价格线：成本(蓝)·空开(紫)·止损(红)·止盈(绿)，触发价公式与 Core 挂单判定一致
