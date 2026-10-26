@@ -1,0 +1,25 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>黑天鹅世纪 · 华尔街百年生存模拟（浏览器预览）</title>
+  <style>
+    html, body { margin: 0; padding: 0; background: #080d1a; height: 100%; }
+    body { display: flex; align-items: flex-start; justify-content: center; }
+    canvas { touch-action: none; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <!-- 加载顺序与 game.js 的 require 顺序一致；?v= 用于浏览器开发防缓存，改代码后递增 -->
+  <script src="js/platform.js?v=86"></script>
+  <script src="js/ui.js?v=81"></script>
+  <script src="js/audio.js?v=68"></script>
+  <script src="js/data.js?v=68"></script>
+  <script src="js/core.js?v=69"></script>
+  <script src="js/chart.js?v=69"></script>
+  <script src="js/scenes.js?v=86"></script>
+  <script src="js/main.js?v=81"></script>
+</body>
+</html>
