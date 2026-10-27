@@ -348,7 +348,7 @@ function renderVolPanel(ctx) {
   }
 
   // 曲目一览（直接点选；当前曲目高亮）
-  UI.text(ctx, '游戏曲目', tx0, py + 178, { size: 11.5, color: C.dim, bold: true });
+  UI.textFit(ctx, '游戏曲目（下面的曲子用于局内；选章页固定 极速 DnB）', tx0, py + 178, tw, { size: 11, color: C.dim, bold: true });
   var curId = A.curTrack().id;
   if (!A.Asset.tracks.length) {           // 离线试玩版（file:// 且不含录音）不再列死链接
     UI.text(ctx, '当前版本不含录音曲目', tx0, py + 200, { size: 11.5, color: C.sub });
@@ -370,7 +370,9 @@ function renderVolPanel(ctx) {
       b.draw(ctx); Scenes.buttons.push(b);
       UI.text(ctx, (on ? '▶ ' : '') + (ix + 1) + '. ' + tr.name, px + 28, ry + 16,
         { size: 11.5, color: on ? C.gold : C.sub, bold: on });
-      if (on) UI.text(ctx, '播放中', px + pw - 28, ry + 16, { size: 10.5, color: C.gold, align: 'right' });
+      // ▶ 表示"局内会放这首"（选择态）；「播放中」看的是此刻真正在响的那条轨，
+      // 因为选章页固定放极速 DnB，两者可能不是同一首。
+      if (A.Asset.activeKey === tr.id) UI.text(ctx, '播放中', px + pw - 28, ry + 16, { size: 10.5, color: C.gold, align: 'right' });
       else if (A.Asset.loading === tr.id) UI.text(ctx, '载入中…', px + pw - 28, ry + 16, { size: 10.5, color: C.sub, align: 'right' });
       else if (A.Asset.failed && A.Asset.failed[tr.id]) UI.text(ctx, '加载失败', px + pw - 28, ry + 16, { size: 10.5, color: C.danger, align: 'right' });
     })(A.Asset.tracks[t], t);

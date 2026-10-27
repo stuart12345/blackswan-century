@@ -100,6 +100,10 @@ function readBytes(file) {
   return fetch(file).then(function (r) { return r.arrayBuffer(); });
 }
 
+// 选章页固定曲目：v0.45 起不再用专门的 bgm_menu.mp3，沿用游戏曲单里的「极速 DnB」。
+// 好处：离线版内嵌曲目里本来就有它（menu 曲从来只在线下才有），选章页终于也有真音乐。
+var MENU_TRACK_ID = 'bgm_t8';
+
 var AudioSys = {
   ctx: null, master: null, bgGain: null, bgBus: null, sfxGain: null, noiseBuf: null,
   bgMuted: false, sfxMuted: false, dark: false,
@@ -110,7 +114,7 @@ var AudioSys = {
   // ---------- 资产 BGM（CC0 真实录音；曲目可切换；失败自动回退程序化钢琴三重奏） ----------
   // 曲目歌单（game 槽位可切换；menu 固定拉格泰姆）。解码按需 + LRU 缓存 3 首，省内存
   Asset: { want: null, loaded: {}, cache: [], triedLoad: false, node: null, filter: null, vol: null,
-           inner: null, active: null, mode: null, trackIdx: 0, loading: null, failed: {}, noAudio: false,
+           inner: null, active: null, activeKey: null, mode: null, trackIdx: 0, loading: null, failed: {}, noAudio: false,
            raw: {}, pfStarted: false,
            tracks: [
              { id: 'bgm_game', name: '电子舞曲', file: 'audio/bgm_game.mp3?v=4' },
@@ -122,6 +126,11 @@ var AudioSys = {
   curTrack: function () {
     var A = this.Asset;
     return A.tracks[A.trackIdx] || { id: '', name: '无曲目', file: '' };
+  },
+
+  // 场景 → 实际曲目 id。选章页固定 MENU_TRACK_ID，局内用玩家选的曲目。
+  keyOf: function (name) {
+    return (name === 'menu') ? MENU_TRACK_ID : this.curTrack().id;
   },
 
   // 换曲（dir=±1）；已缓存立即切，未缓存等解码完成无缝接管
@@ -170,10 +179,11 @@ var AudioSys = {
           A.cache.push(id);
           while (A.cache.length > 3) { delete A.loaded[A.cache.shift()]; }   // LRU 3 首
           // 若场景正想要这首（或换曲待接管）→ 无缝切换
-          if (A.want === 'game' && id === self.curTrack().id) {
+          var wantName = A.want || 'menu';
+          if (id === self.keyOf(wantName)) {
             var wasProcedural = !A.active;
             if (A.active) self._stopAsset();
-            self._startAsset('game');
+            self._startAsset(wantName);
             if (wasProcedural && self.timer) { clearInterval(self.timer); self.timer = null; self.started = false; }
           }
         })
@@ -235,13 +245,13 @@ var AudioSys = {
       return;
     }
     A.mode = 'web';
-    this.loadTrack('bgm_menu');
-    this.loadTrack(this.curTrack().id);
-    var gameKey = this.curTrack().id;
+    this.loadTrack(MENU_TRACK_ID);          // 选章页固定曲
+    this.loadTrack(this.curTrack().id);     // 局内曲（玩家选的）
     var pollIns = setInterval(function () {
-      if (A.loaded[gameKey] && A.want === 'game' && !A.active) {
+      var w = A.want || 'menu';
+      if (A.loaded[self.keyOf(w)] && !A.active) {
         clearInterval(pollIns);
-        self._startAsset('game');
+        self._startAsset(w);
       }
     }, 200);
     setTimeout(function () { clearInterval(pollIns); }, 4000);
@@ -260,6 +270,7 @@ var AudioSys = {
     A.loopSources = null;
     if (A.inner) { try { A.inner.stop(); } catch (e) { /* 忽略 */ } A.inner = null; }
     A.active = null;
+    A.activeKey = null;
   },
 
   // 交叉淡化循环：相邻两遍在尾部 cross 秒内一进一出（任何结尾突兀的曲子都能无痕循环）
@@ -304,7 +315,7 @@ var AudioSys = {
       if (A.inner && A.active === name) return;
       this._stopAsset();
       var inner = wx.createInnerAudioContext();
-      inner.src = (name === 'game') ? 'audio/bgm_game.mp3' : 'audio/bgm_menu.mp3';   // 微信包内路径不带查询串
+      inner.src = (name === 'game') ? 'audio/bgm_game.mp3' : 'audio/bgm_t8.mp3';     // 微信包内路径不带查询串；选章页同样用极速 DnB
       inner.loop = true;
       inner.volume = this.bgMuted ? 0 : (this.dark ? 0.3 : 0.5);
       inner.onError(function () { self._stopAsset(); self.startBgm(); });   // 文件缺失 → 程序化兜底
@@ -313,14 +324,14 @@ var AudioSys = {
       return;
     }
     // 浏览器：交叉淡化循环链 → 暗色低通（可闷音）→ 音量 → bgGain（沿用静音闸与总音量）
-    var key = (name === 'game') ? this.curTrack().id : name;
+    var key = this.keyOf(name);
     if (!A.loaded[key]) {
-      // 未解码好：手上没有在放的才起程序化顶着；已有曲子就保持不动，等解码完成后接管。
-      // （离线版没有 menu 曲，若在这里无条件 startBgm，会与正在放的游戏曲叠成两轨）
+      // 未解码好：手上没有在放的才起程序化顶着（已有曲子就保持，别叠轨），同时排队解码
       if (!A.active) this.startBgm();
+      this.loadTrack(key);                 // 解好后由 loadTrack 回调接管
       return;
     }
-    if (A.active === name && A.loopTimer) return;
+    if (A.activeKey === key && A.loopTimer) { A.active = name; return; }   // 同一首（菜单↔局内）连续放，不重启
     this._stopAsset();
     try {
       A.filter = this.ctx.createBiquadFilter();
@@ -332,6 +343,7 @@ var AudioSys = {
       A.filter.connect(A.vol); A.vol.connect(this.bgGain);
       this._startXfade(A.loaded[key]);
       A.active = name;
+      A.activeKey = key;
       this.prefetchRest();                 // 播稳之后把其余曲目悄悄拉下来
       // 程序化调度器若在跑则让位
       if (this.timer) { clearInterval(this.timer); this.timer = null; this.started = false; }
@@ -597,7 +609,7 @@ var AudioSys = {
       var poll = setInterval(function () {
         waited += 100;
         var w = A.want || 'menu';
-        var wk = (w === 'game') ? self.curTrack().id : w;
+        var wk = self.keyOf(w);
         if (A.loaded[wk]) {
           clearInterval(poll);
           if (A.active !== w) self._startAsset(w);
