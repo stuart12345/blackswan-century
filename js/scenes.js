@@ -350,6 +350,12 @@ function renderVolPanel(ctx) {
   // 曲目一览（直接点选；当前曲目高亮）
   UI.text(ctx, '游戏曲目', tx0, py + 178, { size: 11.5, color: C.dim, bold: true });
   var curId = A.curTrack().id;
+  if (!A.Asset.tracks.length) {           // 离线试玩版（file:// 且不含录音）不再列死链接
+    UI.text(ctx, '当前版本不含录音曲目', tx0, py + 200, { size: 11.5, color: C.sub });
+    UI.text(ctx, A.Asset.noAudio ? '离线试玩版只带程序化音乐；完整版或网页版可换歌'
+                                 : '曲目不可用，已自动使用程序化音乐',
+      tx0, py + 220, { size: 10.5, color: C.dim });
+  }
   for (var t = 0; t < A.Asset.tracks.length; t++) {
     (function (tr, ix) {
       var ry = py + 186 + ix * 28;
@@ -376,7 +382,8 @@ function renderVolPanel(ctx) {
 
   // 存档导出 / 导入（仅浏览器端；微信无 prompt）
   if (!Platform.isWechat) {
-    var exB = UI.button(tx0, py + 186 + A.Asset.tracks.length * 28 + 6, (tw - 10) / 2, 26, '导出存档',
+    var lbY = py + 186 + Math.max(2, A.Asset.tracks.length) * 28 + 6;
+    var exB = UI.button(tx0, lbY, (tw - 10) / 2, 26, '导出存档',
       { bg: C.panel2, color: C.sub, size: 10.5 });
     exB._vol = true;
     exB.onTap = function () {
@@ -389,7 +396,7 @@ function renderVolPanel(ctx) {
       } catch (e) { /* 忽略 */ }
     };
     exB.draw(ctx); Scenes.buttons.push(exB);
-    var imB = UI.button(tx0 + (tw - 10) / 2 + 10, py + 186 + A.Asset.tracks.length * 28 + 6, (tw - 10) / 2, 26, '导入存档',
+    var imB = UI.button(tx0 + (tw - 10) / 2 + 10, lbY, (tw - 10) / 2, 26, '导入存档',
       { bg: C.panel2, color: C.sub, size: 10.5 });
     imB._vol = true;
     imB.onTap = function () {

@@ -76,6 +76,30 @@ var LEAD = (function () {
   return arr;
 })();
 
+// 把 data: URI 直接转成 ArrayBuffer。不能走 fetch：Safari / iOS WKWebView（微信内置浏览器）
+// 不支持 fetch('data:...')，会抛 "URL scheme data is not supported"，离线完整版因此全曲目失败。
+function readBytes(file) {
+  if (/^data:/.test(file)) {
+    return new Promise(function (resolve) {
+      var comma = file.indexOf(',');
+      var meta = file.slice(0, comma), body = file.slice(comma + 1);
+      if (meta.indexOf('base64') < 0) {              // 非 base64 的 data URI 极少见，按文本处理
+        var txt = decodeURIComponent(body);
+        var u8t = new Uint8Array(txt.length);
+        for (var t = 0; t < txt.length; t++) u8t[t] = txt.charCodeAt(t) & 0xFF;
+        resolve(u8t.buffer);
+        return;
+      }
+      var bin = atob(body);
+      var len = bin.length;
+      var arr = new Uint8Array(len);
+      for (var i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
+      resolve(arr.buffer);
+    });
+  }
+  return fetch(file).then(function (r) { return r.arrayBuffer(); });
+}
+
 var AudioSys = {
   ctx: null, master: null, bgGain: null, bgBus: null, sfxGain: null, noiseBuf: null,
   bgMuted: false, sfxMuted: false, dark: false,
@@ -86,7 +110,7 @@ var AudioSys = {
   // ---------- 资产 BGM（CC0 真实录音；曲目可切换；失败自动回退程序化钢琴三重奏） ----------
   // 曲目歌单（game 槽位可切换；menu 固定拉格泰姆）。解码按需 + LRU 缓存 3 首，省内存
   Asset: { want: null, loaded: {}, cache: [], triedLoad: false, node: null, filter: null, vol: null,
-           inner: null, active: null, mode: null, trackIdx: 0, loading: null, failed: {},
+           inner: null, active: null, mode: null, trackIdx: 0, loading: null, failed: {}, noAudio: false,
            raw: {}, pfStarted: false,
            tracks: [
              { id: 'bgm_game', name: '电子舞曲', file: 'audio/bgm_game.mp3?v=4' },
@@ -95,7 +119,10 @@ var AudioSys = {
              { id: 'bgm_game_alt', name: '小夜曲', file: 'audio/bgm_game_alt.mp3' }
            ] },
 
-  curTrack: function () { return this.Asset.tracks[this.Asset.trackIdx]; },
+  curTrack: function () {
+    var A = this.Asset;
+    return A.tracks[A.trackIdx] || { id: '', name: '无曲目', file: '' };
+  },
 
   // 换曲（dir=±1）；已缓存立即切，未缓存等解码完成无缝接管
   // 面板里点选 = 立即试听：不管当前在选章页（want='menu'）还是局内，都当场换成这一首。
@@ -103,6 +130,7 @@ var AudioSys = {
   switchTrack: function (dir) {
     var A = this.Asset;
     var n = A.tracks.length;
+    if (!n) return '无曲目';
     var next = (A.trackIdx + dir + n) % n;
     var same = (next === A.trackIdx);
     A.trackIdx = next;
@@ -120,37 +148,46 @@ var AudioSys = {
   loadTrack: function (id) {
     var self = this, A = this.Asset, tr = null;
     for (var i = 0; i < A.tracks.length; i++) if (A.tracks[i].id === id) tr = A.tracks[i];
-    if (!tr || A.loaded[id] || !this.ctx) return;
+    if (!tr || A.loaded[id] || !this.ctx || !tr.file) return;
     if (A.loading === id) return;             // 同一首别重复解码
     A.loading = id;                           // 面板据此显示"载入中…"
-    // 有预取好的原始字节就直接解码（省掉二次下载），否则现拉
-    var bytes = A.raw && A.raw[id]
-      ? Promise.resolve(A.raw[id])
-      : fetch(tr.file).then(function (r) { return r.arrayBuffer(); });
-    bytes
-      .then(function (ab) {
-        if (A.raw) delete A.raw[id];          // decodeAudioData 会独占这块内存，缓存用完即弃
-        return self.ctx.decodeAudioData(ab);
-      })
-      .then(function (buf) {
-        A.loaded[id] = buf;
-        A.loading = null;
-        delete A.failed[id];
-        A.cache.push(id);
-        while (A.cache.length > 3) { delete A.loaded[A.cache.shift()]; }   // LRU 3 首
-        // 若场景正想要这首（或换曲待接管）→ 无缝切换
-        if (A.want === 'game' && id === self.curTrack().id) {
-          var wasProcedural = !A.active;
-          if (A.active) self._stopAsset();
-          self._startAsset('game');
-          if (wasProcedural && self.timer) { clearInterval(self.timer); self.timer = null; self.started = false; }
-        }
-      })
-      .catch(function (e) {
-        A.loading = null;
-        A.failed[id] = true;
-        console.log('[bgm] 曲目加载失败，沿用当前音乐', id, e && e.message);   // 回退程序化 / 保留旧曲
-      });
+    delete A.failed[id];
+    var attempt = 0;
+    var run = function () {
+      // 预取好的原始字节优先（省掉二次下载）；data: 内嵌曲走 atob，
+      // 因为 Safari/WKWebView（含 iOS 微信）不支持 fetch('data:...')，会直接抛错。
+      var bytes = (attempt === 0 && A.raw && A.raw[id])
+        ? Promise.resolve(A.raw[id])
+        : readBytes(tr.file);
+      return bytes
+        .then(function (ab) {
+          if (A.raw) delete A.raw[id];        // decodeAudioData 会独占这块内存，缓存用完即弃
+          return self.ctx.decodeAudioData(ab);
+        })
+        .then(function (buf) {
+          A.loaded[id] = buf;
+          A.loading = null;
+          A.cache.push(id);
+          while (A.cache.length > 3) { delete A.loaded[A.cache.shift()]; }   // LRU 3 首
+          // 若场景正想要这首（或换曲待接管）→ 无缝切换
+          if (A.want === 'game' && id === self.curTrack().id) {
+            var wasProcedural = !A.active;
+            if (A.active) self._stopAsset();
+            self._startAsset('game');
+            if (wasProcedural && self.timer) { clearInterval(self.timer); self.timer = null; self.started = false; }
+          }
+        })
+        .catch(function (e) {
+          if (attempt === 0) {                // 网络抖动 / 解码偶发失败 → 等 0.9 秒重试一次
+            attempt = 1;
+            return new Promise(function (res) { setTimeout(res, 900); }).then(run);
+          }
+          A.loading = null;
+          A.failed[id] = true;
+          console.log('[bgm] 曲目加载失败，沿用当前音乐', id, e && e.message);   // 回退程序化 / 保留旧曲
+        });
+    };
+    run();
   },
 
   // 后台预取其余曲目（只存原始字节，不提前解码——解码后一首就是几十 MB）。
@@ -916,6 +953,11 @@ if (_embList) {
 } else if (typeof G.BS_EMBED_BGM === 'string' && G.BS_EMBED_BGM) {
   AudioSys.Asset.tracks = [{ id: 'bgm_embed', name: '内置曲', file: G.BS_EMBED_BGM }];
   AudioSys.Asset.trackIdx = 0;
+} else if (typeof location !== 'undefined' && location.protocol === 'file:') {
+  // 试玩版单文件（不含录音）用 file:// 打开：包内 audio/*.mp3 相对路径必然 404。
+  // 与其列 4 条注定"加载失败"的死链接，不如把曲目表清空、在面板里说明原因。
+  AudioSys.Asset.tracks = [];
+  AudioSys.Asset.noAudio = true;
 }
 if (AudioSys.Asset.tracks.length < 4) {          // 单曲产物：清掉可能越界的历史下标
   var _savedTrack = Platform.getSetting('bs_track');
