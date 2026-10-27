@@ -850,14 +850,23 @@ var AudioSys = {
   }
 };
 
-// 离线分发（单文件版）：构建脚本会在本文件之前注入 G.BS_EMBED_BGM（base64 data URI）。
-// 此时只保留这一首内置曲——否则相对路径 audio/*.mp3 在 file:// 下必然 404，
-// 而 switchTrack 切到空曲目会让玩家以为音乐坏了。
-if (typeof G.BS_EMBED_BGM === 'string' && G.BS_EMBED_BGM) {
+// 离线分发（单文件版）：构建脚本会在本文件之前注入曲目表。
+// file:// 下相对路径 audio/*.mp3 必然 404，所以完整版把线上那 4 首全部 base64 内嵌，
+// 保证"四首可换"在离线状态下也在；试玩版不注入，走程序化音乐兜底。
+//   新格式：G.BS_EMBED_BGMS = [{ id, name, file(data URI) }, …]
+//   老格式：G.BS_EMBED_BGM  = 单个 data URI（仅 1 首，兼容旧产物）
+var _embList = (typeof G.BS_EMBED_BGMS !== 'undefined' && G.BS_EMBED_BGMS && G.BS_EMBED_BGMS.length)
+  ? G.BS_EMBED_BGMS : null;
+if (_embList) {
+  AudioSys.Asset.tracks = _embList;
+  AudioSys.Asset.trackIdx = 0;
+} else if (typeof G.BS_EMBED_BGM === 'string' && G.BS_EMBED_BGM) {
   AudioSys.Asset.tracks = [{ id: 'bgm_embed', name: '内置曲', file: G.BS_EMBED_BGM }];
   AudioSys.Asset.trackIdx = 0;
+}
+if (AudioSys.Asset.tracks.length < 4) {          // 单曲产物：清掉可能越界的历史下标
   var _savedTrack = Platform.getSetting('bs_track');
-  if (_savedTrack) Platform.setSetting('bs_track', '0');   // 清掉旧的多曲目下标，免得越界
+  if (_savedTrack) Platform.setSetting('bs_track', '0');
 }
 
 G.AudioSys = AudioSys;
