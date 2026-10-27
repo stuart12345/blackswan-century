@@ -194,6 +194,14 @@ var Scenes = {
   touchEnd: function (x, y) {
     if (this._feedDrag) { this._feedDrag = null; return; }
     if (VOL.drag) { volCommit(); return; }
+    // 音量面板开着时，只有面板自己的按钮能响应。
+    // 从前这里直接往下走，选章页的"章节简介"热区（introRects）会把面板下半部分的点击吃掉，
+    // 表现为"点曲目行没反应/切换不了音乐"（v0.43 定位）。
+    if (this.volOpen) {
+      var vp = this.pressed; this.pressed = null;
+      if (vp && vp.btn.onTap && Math.abs(x - vp.x) + Math.abs(y - vp.y) < 14) vp.btn.onTap();
+      return;
+    }
     // 触摸层直选：挂单预设 / 信物卡 / 选章简介（这些浮层上按钮机制不可靠）
     var st = G.state;
     if (st && st.modal && st.modal.orderRects) {
