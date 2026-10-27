@@ -324,9 +324,17 @@ Platform.saveCard = function (canvas, title, share) {
   } catch (e2) { console.log('[card] 保存失败', e2); showCardOverlay(url, surl); }
 };
 
-// ---------- 轻量设置存取（主题等） ----------
+// ---------- 轻量设置存取（主题 / 存档） ----------
+// 无痕模式、第三方 Cookie 受限、配额写满时，setItem 会直接抛错。
+// 从前这里静默吞错，于是"写进去的读不回来"：成就会每个 tick 重新判定为首次解锁，
+// 一路狂弹"成就解锁"、局内进度也存不住。改成内存镜像兜底——写不进去也至少本会话自洽。
+
+var memStore = {};
+var storeWarned = false;
+Platform.storageOk = true;          // false = 本会话已降级为纯内存存档
 
 Platform.getSetting = function (key) {
+  if (key in memStore) return memStore[key];        // 内存镜像优先（含刚写入失败的值）
   try {
     if (this.isWechat) return wx.getStorageSync(key) || null;
     return window.localStorage.getItem(key);
@@ -334,10 +342,17 @@ Platform.getSetting = function (key) {
 };
 
 Platform.setSetting = function (key, val) {
+  memStore[key] = val;
   try {
     if (this.isWechat) { wx.setStorageSync(key, val); return; }
     window.localStorage.setItem(key, val);
-  } catch (e) { /* 忽略 */ }
+  } catch (e) {
+    if (!storeWarned) {
+      storeWarned = true;
+      console.log('[storage] 本地存储不可写，已降级为内存存档（关掉页面会丢进度）', e);
+    }
+    Platform.storageOk = false;
+  }
 };
 
 G.Platform = Platform;

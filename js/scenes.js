@@ -113,6 +113,11 @@ var Scenes = {
   update: function (dt) {
     // 界面放不下时不推进游戏时间（手机横屏 / 桌面拖窗过矮 / 分屏），避免"看不见却在流逝"
     if (Platform.tooShort) return;
+    // 存档降级提示（无痕模式 / 隐私设置 / 配额已满）：本局提示一次，别让玩家以为进度存上了
+    if (Platform.storageOk === false && !this._storeTip && this.current === GameScene) {
+      this._storeTip = true;
+      this.current.toasts.push({ text: '⚠ 浏览器禁用了本地存档，关掉页面会丢进度', t: 4200 });
+    }
     if (this.mockAd) {
       this.mockAd.t -= dt;
       if (this.mockAd.t <= 0) {
@@ -1012,7 +1017,12 @@ var GameScene = {
       // 局内即时成就
       var midGot = Core.checkMidAch(s);
       for (var mg = 0; mg < midGot.length; mg++) {
-        this.toasts.push({ text: '★ 成就解锁：' + midGot[mg], t: 2600 });
+        var mgTxt = '★ 成就解锁：' + midGot[mg];
+        var mgDup = false;
+        for (var mt = 0; mt < this.toasts.length; mt++) {
+          if (this.toasts[mt].text === mgTxt) { mgDup = true; break; }   // 已在队列里就别叠第二张
+        }
+        if (!mgDup) this.toasts.push({ text: mgTxt, t: 2600 });
         Sfx.play('praise');
       }
     }

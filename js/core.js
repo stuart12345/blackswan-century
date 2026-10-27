@@ -817,6 +817,7 @@ Core.clearSave = function () {
 // 局内即时成就：mid 标记的成就不等结算，当场解锁并返回名称（供 toast 播报）
 Core.checkMidAch = function (s) {
   if (s.century) return [];                       // 百年模式不参与成就
+  if (!s._midAch) s._midAch = {};                 // 本局已播报过的成就 id（存档失效时的兜底）
   var data = loadAll();
   var m = data.meta;
   var got = [];
@@ -824,10 +825,10 @@ Core.checkMidAch = function (s) {
   s.result0 = Core.netWorth(s);                   // 局中即用当前净值
   for (var a = 0; a < D.achievements.length; a++) {
     var ac = D.achievements[a];
-    if (!ac.mid || m.ach[ac.id]) continue;
+    if (!ac.mid || m.ach[ac.id] || s._midAch[ac.id]) continue;
     var hit = false;
     try { hit = !!ac.cond(s, { win: false, nwChg: 0, idxChg: 0 }, m); } catch (e) { hit = false; }
-    if (hit) { m.ach[ac.id] = true; got.push(ac.name); }
+    if (hit) { m.ach[ac.id] = true; s._midAch[ac.id] = true; got.push(ac.name); }
   }
   s.result0 = finSave;
   if (got.length) {
