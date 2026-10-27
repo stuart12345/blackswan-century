@@ -87,6 +87,7 @@ var AudioSys = {
   // 曲目歌单（game 槽位可切换；menu 固定拉格泰姆）。解码按需 + LRU 缓存 3 首，省内存
   Asset: { want: null, loaded: {}, cache: [], triedLoad: false, node: null, filter: null, vol: null,
            inner: null, active: null, mode: null, trackIdx: 0, loading: null, failed: {},
+           raw: {}, pfStarted: false,
            tracks: [
              { id: 'bgm_game', name: '电子舞曲', file: 'audio/bgm_game.mp3?v=4' },
              { id: 'bgm_t2', name: '复古电音', file: 'audio/bgm_t2.mp3' },
@@ -122,8 +123,15 @@ var AudioSys = {
     if (!tr || A.loaded[id] || !this.ctx) return;
     if (A.loading === id) return;             // 同一首别重复解码
     A.loading = id;                           // 面板据此显示"载入中…"
-    fetch(tr.file).then(function (r) { return r.arrayBuffer(); })
-      .then(function (ab) { return self.ctx.decodeAudioData(ab); })
+    // 有预取好的原始字节就直接解码（省掉二次下载），否则现拉
+    var bytes = A.raw && A.raw[id]
+      ? Promise.resolve(A.raw[id])
+      : fetch(tr.file).then(function (r) { return r.arrayBuffer(); });
+    bytes
+      .then(function (ab) {
+        if (A.raw) delete A.raw[id];          // decodeAudioData 会独占这块内存，缓存用完即弃
+        return self.ctx.decodeAudioData(ab);
+      })
       .then(function (buf) {
         A.loaded[id] = buf;
         A.loading = null;
@@ -143,6 +151,33 @@ var AudioSys = {
         A.failed[id] = true;
         console.log('[bgm] 曲目加载失败，沿用当前音乐', id, e && e.message);   // 回退程序化 / 保留旧曲
       });
+  },
+
+  // 后台预取其余曲目（只存原始字节，不提前解码——解码后一首就是几十 MB）。
+  // 线上 mp3 每首 1–5MB，慢网下切歌要等十几秒；预取让面板里点选几乎即时。
+  // 省流模式、离线单文件（data: URI）跳过。
+  prefetchRest: function () {
+    var self = this, A = this.Asset;
+    if (A.mode !== 'web' || A.pfStarted) return;
+    try {
+      var c = navigator.connection;
+      if (c && (c.saveData || c.effectiveType === 'slow-2g' || c.effectiveType === '2g')) return;
+    } catch (e) { /* 老浏览器没有 connection */ }
+    A.pfStarted = true;
+    A.raw = A.raw || {};
+    var i = 0;
+    var next = function () {
+      while (i < A.tracks.length) {
+        var t = A.tracks[i++];
+        if (t.id === self.curTrack().id || A.loaded[t.id] || A.raw[t.id] || /^data:/.test(t.file)) continue;
+        var tid = t.id, tfile = t.file;                    // 闭包捕获，别让 6 秒后的下一轮改写 t
+        fetch(tfile).then(function (r) { return r.arrayBuffer(); })
+          .then(function (ab) { A.raw[tid] = ab; })
+          .catch(function () { /* 预取失败无所谓，真点的时候会再拉一次 */ });
+        return setTimeout(next, 6000);        // 一首接一首，别跟正在播的那首抢带宽
+      }
+    };
+    setTimeout(next, 8000);                   // 首曲先播稳
   },
 
   playAsset: function (name) {
@@ -260,6 +295,7 @@ var AudioSys = {
       A.filter.connect(A.vol); A.vol.connect(this.bgGain);
       this._startXfade(A.loaded[key]);
       A.active = name;
+      this.prefetchRest();                 // 播稳之后把其余曲目悄悄拉下来
       // 程序化调度器若在跑则让位
       if (this.timer) { clearInterval(this.timer); this.timer = null; this.started = false; }
     } catch (e) { this.startBgm(); }
