@@ -366,6 +366,7 @@ function renderVolPanel(ctx) {
         { size: 11.5, color: on ? C.gold : C.sub, bold: on });
       if (on) UI.text(ctx, '播放中', px + pw - 28, ry + 16, { size: 10.5, color: C.gold, align: 'right' });
       else if (A.Asset.loading === tr.id) UI.text(ctx, '载入中…', px + pw - 28, ry + 16, { size: 10.5, color: C.sub, align: 'right' });
+      else if (A.Asset.failed && A.Asset.failed[tr.id]) UI.text(ctx, '加载失败', px + pw - 28, ry + 16, { size: 10.5, color: C.danger, align: 'right' });
     })(A.Asset.tracks[t], t);
   }
   VOL.trackRows = [];

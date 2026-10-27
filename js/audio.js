@@ -86,7 +86,7 @@ var AudioSys = {
   // ---------- 资产 BGM（CC0 真实录音；曲目可切换；失败自动回退程序化钢琴三重奏） ----------
   // 曲目歌单（game 槽位可切换；menu 固定拉格泰姆）。解码按需 + LRU 缓存 3 首，省内存
   Asset: { want: null, loaded: {}, cache: [], triedLoad: false, node: null, filter: null, vol: null,
-           inner: null, active: null, mode: null, trackIdx: 0, loading: null,
+           inner: null, active: null, mode: null, trackIdx: 0, loading: null, failed: {},
            tracks: [
              { id: 'bgm_game', name: '电子舞曲', file: 'audio/bgm_game.mp3?v=4' },
              { id: 'bgm_t2', name: '复古电音', file: 'audio/bgm_t2.mp3' },
@@ -127,6 +127,7 @@ var AudioSys = {
       .then(function (buf) {
         A.loaded[id] = buf;
         A.loading = null;
+        delete A.failed[id];
         A.cache.push(id);
         while (A.cache.length > 3) { delete A.loaded[A.cache.shift()]; }   // LRU 3 首
         // 若场景正想要这首（或换曲待接管）→ 无缝切换
@@ -139,6 +140,7 @@ var AudioSys = {
       })
       .catch(function (e) {
         A.loading = null;
+        A.failed[id] = true;
         console.log('[bgm] 曲目加载失败，沿用当前音乐', id, e && e.message);   // 回退程序化 / 保留旧曲
       });
   },
