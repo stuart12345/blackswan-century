@@ -86,7 +86,7 @@ var AudioSys = {
   // ---------- 资产 BGM（CC0 真实录音；曲目可切换；失败自动回退程序化钢琴三重奏） ----------
   // 曲目歌单（game 槽位可切换；menu 固定拉格泰姆）。解码按需 + LRU 缓存 3 首，省内存
   Asset: { want: null, loaded: {}, cache: [], triedLoad: false, node: null, filter: null, vol: null,
-           inner: null, active: null, mode: null, trackIdx: 0,
+           inner: null, active: null, mode: null, trackIdx: 0, loading: null,
            tracks: [
              { id: 'bgm_game', name: '电子舞曲', file: 'audio/bgm_game.mp3?v=4' },
              { id: 'bgm_t2', name: '复古电音', file: 'audio/bgm_t2.mp3' },
@@ -97,17 +97,21 @@ var AudioSys = {
   curTrack: function () { return this.Asset.tracks[this.Asset.trackIdx]; },
 
   // 换曲（dir=±1）；已缓存立即切，未缓存等解码完成无缝接管
+  // 面板里点选 = 立即试听：不管当前在选章页（want='menu'）还是局内，都当场换成这一首。
+  // v0.42 之前只在 A.active==='game' 时才切，选章页换曲等于点了没反应（用户反馈"切换后没用"）。
   switchTrack: function (dir) {
     var A = this.Asset;
-    A.trackIdx = (A.trackIdx + dir + A.tracks.length) % A.tracks.length;
+    var n = A.tracks.length;
+    var next = (A.trackIdx + dir + n) % n;
+    var same = (next === A.trackIdx);
+    A.trackIdx = next;
     Platform.setSetting('bs_track', String(A.trackIdx));
     var id = A.tracks[A.trackIdx].id;
-    if (A.loaded[id] && A.active === 'game') {
-      this._stopAsset();
-      A.active = null;
-      this._startAsset('game');
+    A.want = 'game';                        // 试听即接管 game 槽位，loadTrack 的回调据此启动
+    if (A.loaded[id]) {
+      if (!(same && A.active === 'game')) { this._stopAsset(); this._startAsset('game'); }
     } else {
-      this.loadTrack(id);   // 解码完成后由 loadTick 接管
+      this.loadTrack(id);                   // 解码完成后由 loadTrack 接管
     }
     return A.tracks[A.trackIdx].name;
   },
@@ -116,10 +120,13 @@ var AudioSys = {
     var self = this, A = this.Asset, tr = null;
     for (var i = 0; i < A.tracks.length; i++) if (A.tracks[i].id === id) tr = A.tracks[i];
     if (!tr || A.loaded[id] || !this.ctx) return;
+    if (A.loading === id) return;             // 同一首别重复解码
+    A.loading = id;                           // 面板据此显示"载入中…"
     fetch(tr.file).then(function (r) { return r.arrayBuffer(); })
       .then(function (ab) { return self.ctx.decodeAudioData(ab); })
       .then(function (buf) {
         A.loaded[id] = buf;
+        A.loading = null;
         A.cache.push(id);
         while (A.cache.length > 3) { delete A.loaded[A.cache.shift()]; }   // LRU 3 首
         // 若场景正想要这首（或换曲待接管）→ 无缝切换
@@ -130,7 +137,10 @@ var AudioSys = {
           if (wasProcedural && self.timer) { clearInterval(self.timer); self.timer = null; self.started = false; }
         }
       })
-      .catch(function () { /* 忽略，回退程序化 */ });
+      .catch(function (e) {
+        A.loading = null;
+        console.log('[bgm] 曲目加载失败，沿用当前音乐', id, e && e.message);   // 回退程序化 / 保留旧曲
+      });
   },
 
   playAsset: function (name) {
@@ -230,7 +240,12 @@ var AudioSys = {
     }
     // 浏览器：交叉淡化循环链 → 暗色低通（可闷音）→ 音量 → bgGain（沿用静音闸与总音量）
     var key = (name === 'game') ? this.curTrack().id : name;
-    if (!A.loaded[key]) { this.startBgm(); return; }                     // 未解码好 → 先程序化顶着
+    if (!A.loaded[key]) {
+      // 未解码好：手上没有在放的才起程序化顶着；已有曲子就保持不动，等解码完成后接管。
+      // （离线版没有 menu 曲，若在这里无条件 startBgm，会与正在放的游戏曲叠成两轨）
+      if (!A.active) this.startBgm();
+      return;
+    }
     if (A.active === name && A.loopTimer) return;
     this._stopAsset();
     try {
