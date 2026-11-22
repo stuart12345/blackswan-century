@@ -589,6 +589,8 @@ var SelectScene = {
     if (resume && this.run && this.run.ch === ch.id) {
       G.state = this.run;
       Core.ensureFields(G.state);
+      // 旧教学存档停在"看消息/加速"两步，没有新字段，重来一遍，免得卡在卖出那步
+      if (G.state._tut >= 2 && G.state._tut <= 3 && !G.state._tutBought) G.state._tut = 0;
     } else {
       G.state = Core.newRun(ch.id);
     }
@@ -1012,7 +1014,8 @@ var GameScene = {
     if (s.pendingCard || s.pendingWarn || s.liqOpen || s.modal) return;
     if (Scenes.volOpen) return;                    // 音量面板打开时暂停时间
     if (s.autoPaused) return;                    // 关键消息到达，时间自动暂停
-    if (s._tut !== undefined && s._tut < 4) return;   // 教学进行中，时间冻结
+    // 教学：买之前和卖之后冻结时间，「看涨跌」那步放行——不然玩家看不到 K 线在动，第二步就白教了
+    if (s._tut !== undefined && s._tut < 5 && s._tut !== 2) return;
     if (!s.speed) return;
 
     var ch = Core.chapter(s);
@@ -1045,15 +1048,12 @@ var GameScene = {
         Sfx.play('praise');
       }
     }
-    // 教学步进：等待用户完成动作
-    if (s._tut === 1 && s.stats.trades >= 1) {
-      s._tut = 2;
-      this.toasts.push({ text: '✓ 第一笔成交', t: 2000 });
-    }
-    if (s._tut === 3 && s.speed >= 2) {
+    // 教学步进：卖出成交 → 记下卖出后净值，进入「净值变了」那一步（买入时净值在 doTrade 里记）
+    if (s._tut === 3 && s.stats.trades >= 2 && s._tutBought &&
+        Object.keys(s.longs).length === 0) {
       s._tut = 4;
-      Core.markTutorialDone();
-      this.toasts.push({ text: '★ 教学毕业，时代由你掌控', t: 2600 });
+      s._tutNW1 = Core.netWorth(s);
+      this.toasts.push({ text: '✓ 卖出成交，看看净值', t: 2200 });
     }
     // 百年孤旅：时代落幕 → 强制结算 + 信物三选一
     if (s.century && s.phase === 'play' && !s.modal && s.week >= s.century.w1) {
@@ -1093,8 +1093,18 @@ var GameScene = {
         Sfx.play('praise');
       }
     }
-    // 教学：第一单完成即步进（成就 toast 由 update 的 checkMidAch 处理）
-    if (s._tut === 1 && s.stats.trades >= 1) { s._tut = 2; this.toasts.push({ text: '✓ 第一笔成交', t: 2000 }); }
+    // 教学：买入成交 → 记下此刻净值，放行到「看涨跌」；卖出成交交给 update 推进
+    if (s._tut === 1 && action === 'buy' && s.longs[id]) {
+      s._tut = 2;
+      s._tutBought = true;
+      s._tutNW0 = Core.netWorth(s);
+      this.toasts.push({ text: '✓ 买入成交，看 K 线怎么走', t: 2200 });
+    }
+    if (s._tut === 3 && action === 'sell' && r && Object.keys(s.longs).length === 0) {
+      s._tut = 4;
+      s._tutNW1 = Core.netWorth(s);
+      this.toasts.push({ text: '✓ 卖出成交，看看净值', t: 2200 });
+    }
   },
 
   render: function (ctx) {
@@ -1119,10 +1129,7 @@ var GameScene = {
       (function (idx) {
         var b = UI.button(W - 12 - (3 - idx) * 40, 10, 36, 26, spLabels[idx],
           { bg: s.speed === idx ? '#0e7490' : C.panel2, color: s.speed === idx ? '#ffffff' : C.sub, size: 11 });
-        b.onTap = function () { s.speed = idx; s.autoPaused = false;
-          if (s._tut === 3 && idx >= 2) { s._tut = 4; Core.markTutorialDone();
-            GameScene.toasts.push({ text: '★ 教学毕业，时代由你掌控', t: 2600 }); }
-        };
+        b.onTap = function () { s.speed = idx; s.autoPaused = false; };
         b.draw(ctx); Scenes.buttons.push(b);
       })(sp);
     }
@@ -1406,7 +1413,7 @@ var GameScene = {
     }
 
     // 新手教学浮层
-    if (s._tut !== undefined && s._tut < 4 && !s.modal) this.renderTut(ctx, s._tut);
+    if (s._tut !== undefined && s._tut < 5 && !s.modal) this.renderTut(ctx, s._tut);
 
     // ===== 浮层 =====
     if (this.praise) renderPraise(ctx, this.praise);
@@ -1936,47 +1943,67 @@ var GameScene = {
     shareC.draw(ctx); Scenes.buttons.push(shareC);
   },
 
-  // —— 新手教学浮层（第0步欢迎 → 买一单 → 看消息 → 加速） ——
+  // —— 新手教学：买一手 → 看涨跌 → 卖出 → 看净值变化，四步约 30 秒 ——
+  // 不再整屏压暗：第二步就是要让玩家看清 K 线，遮罩会把教学本身废掉。
   renderTut: function (ctx, step) {
-    var W = Platform.W, H = Platform.H;
-    ctx.fillStyle = 'rgba(4,8,18,0.45)';
-    ctx.fillRect(0, 0, W, H);
-    var hi = null, txt = '', btnTxt = null;
+    var W = Platform.W, H = Platform.H, s4 = G.state;
+    if (!s4) return;
+    var listY = listTopY(), accY = listY + 18 + 7 * 24 + 6, actY = accY + 100;
+    var bw2 = (W - 48) / 4;
+    var hi = [], txt = '', btnTxt = null, btnFn = null;
+
     if (step === 0) {
-      txt = '欢迎来到 1926。你有一笔 $1,000 和七年时间——先花一分钟，学会在这张交易台上活下来。';
-      btnTxt = '开始教学';
+      txt = '30 秒学会活下来：买一手 → 看涨跌 → 卖出 → 看净值变化。我会圈出每一步要点的位置。';
+      btnTxt = '开始 ▶';
+      btnFn = function () { if (G.state) G.state._tut = 1; };
     } else if (step === 1) {
-      var listY = H - 414, accY = listY + 18 + 7 * 24 + 6;
-      hi = { x: 12, y: accY + 100, w: (W - 24 - 24) / 4, h: 36 };
-      txt = '第一步：点击下方【买入】，把一半现金换成股票。';
+      hi.push({ x: 12, y: actY, w: bw2, h: 36 });
+      txt = '① 点【买入】→ 选「买 50%」。钱变成股票，净值暂时不变。';
     } else if (step === 2) {
-      hi = { x: 12, y: H - 456, w: W - 24, h: 34 };
-      txt = '第二步：每周消息会流进来，真伪自己掂量。点【下一步】。';
-      btnTxt = '下一步';
+      hi.push({ x: 12, y: 62, w: Math.min(210, W - 160), h: 26 });
+      hi.push({ x: 12, y: 112, w: W - 24, h: 160 });
+      txt = '② 时间开始走了。盯住 K 线和净值：红涨绿跌。看到价格变了就继续。';
+      btnTxt = '看到了，去卖出 ▶';
+      btnFn = function () { if (G.state) G.state._tut = 3; };
     } else if (step === 3) {
-      hi = { x: W - 132, y: 10, w: 116, h: 26 };
-      txt = '第三步：点 ▶▶ 加速时间。崩盘来时，记得 ⏸。';
+      hi.push({ x: 12 + bw2 + 8, y: actY, w: bw2, h: 36 });
+      txt = '③ 点【卖出】→ 选「卖 100%」。把纸上的盈亏变成真金白银。';
+    } else if (step === 4) {
+      var nw0 = s4._tutNW0 || 0, nw1 = s4._tutNW1 || Core.netWorth(s4), d = nw1 - nw0;
+      hi.push({ x: 12, y: 64, w: Math.min(210, W - 160), h: 28 });
+      txt = '④ 净值 ' + usd(nw0) + ' → ' + usd(nw1) + '（' + pctStr(nw0 ? d / nw0 : 0) +
+        '）。这就是一轮交易；后面 11 个时代，交给你了。';
+      btnTxt = '学会啦，开始 ▶';
+      btnFn = function () {
+        if (G.state) { G.state._tut = 5; Core.markTutorialDone(); }
+        GameScene.toasts.push({ text: '★ 教学毕业，时代由你掌控', t: 2600 });
+      };
     }
-    if (hi) {
+
+    // 卡片位置：看涨跌那步放到 K 线下方，免得盖住要观察的图
+    var bw3 = Math.min(380, W - 32), bx = W / 2 - bw3 / 2;
+    var tl = wrap(ctx, (step ? step + '/4　' : '') + txt, bw3 - 28, 11.5);
+    var bh3 = 34 + tl.length * 17 + (btnTxt ? 42 : 12);
+    var by3 = (step === 2) ? Math.max(128, tabsY() - 18 - 112 + 120) : (H / 2 - 150);
+    if (step === 2 && hi[1]) hi[1].h = Math.max(40, Math.min(160, by3 - 8 - 112));
+    if (by3 + bh3 > actY - 8) by3 = Math.max(96, actY - 8 - bh3);
+
+    for (var h = 0; h < hi.length; h++) {
       ctx.strokeStyle = C.gold;
       ctx.lineWidth = 3;
       ctx.setLineDash([6, 4]);
       ctx.lineDashOffset = -(Date.now() / 60) % 20;
-      UI.roundRect(ctx, hi.x - 4, hi.y - 4, hi.w + 8, hi.h + 8, 10, null, C.gold);
+      UI.roundRect(ctx, hi[h].x - 4, hi[h].y - 4, hi[h].w + 8, hi[h].h + 8, 10, null, C.gold);
       ctx.setLineDash([]);
     }
-    var bw3 = 360;
-    var bx = W / 2 - bw3 / 2;
-    var tl = wrap(ctx, txt, bw3 - 32, 11.5);
-    var bh3 = 40 + tl.length * 18 + (btnTxt ? 46 : 14);
-    var by3 = H / 2 - 150;
-    UI.roundRect(ctx, bx, by3, bw3, bh3, 12, C.panel, '#7c3aed');
+    UI.roundRect(ctx, bx, by3, bw3, bh3, 12, C.backdropHeavy, '#7c3aed');
+    UI.text(ctx, '新手教学', bx + 16, by3 + 20, { size: 11, color: C.purple, bold: true });
     for (var i = 0; i < tl.length; i++) {
-      UI.text(ctx, tl[i], W / 2, by3 + 28 + i * 18, { size: 11.5, color: C.text, align: 'center' });
+      UI.text(ctx, tl[i], W / 2, by3 + 42 + i * 17, { size: 11.5, color: C.text, align: 'center' });
     }
     if (btnTxt) {
-      var b = UI.button(W / 2 - 60, by3 + bh3 - 44, 120, 30, btnTxt, { bg: '#0e7490', size: 12.5 });
-      b.onTap = function () { if (G.state) G.state._tut = (step === 0) ? 1 : 3; };
+      var b = UI.button(W / 2 - 76, by3 + bh3 - 38, 152, 28, btnTxt, { bg: '#0e7490', size: 12 });
+      b.onTap = btnFn;
       b.draw(ctx); Scenes.buttons.push(b);
     }
   },
