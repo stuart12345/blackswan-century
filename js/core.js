@@ -794,6 +794,8 @@ function loadAll() {
   if (!m.codex) m.codex = {};
   if (!m.ach) m.ach = {};
   if (!m.daily) m.daily = null;
+  // 个人战绩档案（v0.48）：跨局累积，与 stars/best（单章纪录）分开存放
+  if (!m.record) m.record = { plays: 0, wins: 0, bankrupt: 0, weeks: 0, bestStreak: 0, endings: {} };
   return data;
 }
 Core.loadAll = loadAll;
@@ -843,6 +845,52 @@ Core.markTutorialDone = function () {
   try { Platform.setSetting(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 忽略 */ }
 };
 
+// ---------- 结局叙事（v0.48）：把冷冰冰的净值翻译成一句「人生评语」 ----------
+// 纯函数，不写存档；结算页与战绩卡共用，保证两处文案一致。
+// 优先级按戏剧性排序：破产 → 传奇 → 惊险 → 稳健 → 惨胜/失败。
+Core.endingOf = function (s) {
+  function usd0(v) { return '$' + Math.round(v).toLocaleString('en-US'); }
+  var ch = chapterById(s.ch);
+  var fin = s.result ? s.result.nw : Core.netWorth(s);
+  var stars = s.result ? (s.result.stars || 0) : 0;
+  var broke = s.phase === 'broke' || fin <= 0;
+  var nwChg = fin / ch.startCash - 1;
+  var liqs = s.stats.liqs || 0, swans = (s.stats.swans || []).length;
+  var dd = s.stats.maxDD || 0, lev = !!s.stats.loanEver;
+  var E = {
+    bust:   { id: 'bust',   title: '爆仓出局', tone: 'bad',
+      desc: '保证金通知来得比勇气快。市场没有恶意，它只是不认识你的账户。' },
+    phoenix:{ id: 'phoenix',title: '死里逃生', tone: 'warn',
+      desc: '你被强平过' + liqs + '次，却还是把这个时代走了完。活下来，有时就是全部本事。' },
+    legend: { id: 'legend', title: '一代传奇', tone: 'gold',
+      desc: '多年以后人们会说：有个人在这个时代，把 ' + usd0(ch.startCash) + ' 变成了 ' + usd0(fin) + '。' },
+    survivor:{ id: 'survivor',title: '穿越风暴', tone: 'gold',
+      desc: '亲历 ' + swans + ' 只黑天鹅，最大回撤 ' + Math.round(dd * 100) + '%，你没被任何一次吓下车。' },
+    steady: { id: 'steady', title: '稳稳的赢家', tone: 'good',
+      desc: '没加杠杆，没赌奇迹。你只是让时间站在自己这边，然后收下了它给的答案。' },
+    narrow: { id: 'narrow', title: '险胜', tone: 'warn',
+      desc: '过程比结果惊险得多。这次运气站在你这边，但下一次未必。' },
+    flat:   { id: 'flat',   title: '白忙一场', tone: 'dim',
+      desc: '你熬过了整个时代，钱袋却没跟着变厚。历史只奖励活下来还变强的人。' },
+    loss:   { id: 'loss',   title: '时代的注脚', tone: 'bad',
+      desc: '大盘涨了，你的账户却缩水了。市场从不亏待耐心，也不善待侥幸。' }
+  };
+  if (broke) return E.bust;
+  if (stars >= 3) return E.legend;
+  if (liqs > 0) return E.phoenix;
+  if (swans >= 2 && dd >= 0.3) return E.survivor;
+  if (stars === 2 && !lev) return E.steady;
+  if (stars >= 1 && (lev || dd >= 0.35)) return E.narrow;
+  if (stars >= 1) return E.steady;
+  if (nwChg >= 0) return E.flat;
+  return E.loss;
+};
+// 结局 id → 中文名（档案「结局收集」用；新增结局记得同步这里）
+Core.ENDING_NAMES = {
+  bust: '爆仓出局', phoenix: '死里逃生', legend: '一代传奇', survivor: '穿越风暴',
+  steady: '稳稳的赢家', narrow: '险胜', flat: '白忙一场', loss: '时代的注脚'
+};
+
 // 结算：星级/最好成绩 + 黑天鹅图鉴解锁 + 成就评定 + 每日挑战记录
 // 返回 { ach: [新解锁成就名], codex: [新解锁图鉴标题] } 供结算页展示
 Core.recordSettle = function (s) {
@@ -890,6 +938,30 @@ Core.recordSettle = function (s) {
   }
   // 连胜（通关 = ★1 及以上；百年模式不参与）
   m.streak = (!isC && r.win) ? (m.streak || 0) + 1 : (isC ? (m.streak || 0) : 0);
+
+  // 结局评语与「比上次」基准：展示型输出，重复调用（广告 +1★）也要重算，故放在档案块外。
+  out.ending = Core.endingOf(s);
+  out.prevNw = m.record.lastNw || 0;
+
+  // 个人战绩档案（v0.48）：百年孤旅走自己的 centuryBest，不进主档案。
+  // 破产也算一局（fin<=0 或 phase=broke）；复活会回到 play 但 _archived 不清，避免重复计。
+  if (!isC && !s._archived) {
+    s._archived = true;
+    var rec = m.record;
+    rec.plays = (rec.plays || 0) + 1;
+    if (r.win) rec.wins = (rec.wins || 0) + 1;
+    if (fin <= 0 || s.phase === 'broke' || (s.result && s.result.nw === 0)) {
+      rec.bankrupt = (rec.bankrupt || 0) + 1;
+    }
+    rec.weeks = (rec.weeks || 0) + Math.max(0, s.week || 0);
+    if ((m.streak || 0) > (rec.bestStreak || 0)) rec.bestStreak = m.streak;
+    var end = out.ending;
+    if (!rec.endings) rec.endings = {};
+    rec.endings[end.id] = (rec.endings[end.id] || 0) + 1;
+    rec.lastCh = s.ch;
+    rec.lastNw = Math.round(fin);
+    out.record = { plays: rec.plays, prevNw: out.prevNw };
+  }
   data.run = null;
   try { Platform.setSetting(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* 忽略 */ }
   return out;

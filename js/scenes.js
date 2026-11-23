@@ -220,6 +220,7 @@ var Scenes = {
       }
     }
     if (this.current === SelectScene && !SelectScene.codexOpen && !SelectScene.helpOpen &&
+        !SelectScene.archiveOpen && !SelectScene.dailyOpen && !SelectScene.invite &&
         !SelectScene.introShow && SelectScene.introRects) {
       for (var ir = 0; ir < SelectScene.introRects.length; ir++) {
         var r5 = SelectScene.introRects[ir];
@@ -241,8 +242,9 @@ var Scenes = {
       return;
     }
     if (this.current === SelectScene && SelectScene.codexOpen) { SelectScene.codexScrollBy(dy); return; }
+    if (this.current === SelectScene && SelectScene.archiveOpen) { SelectScene.archiveScrollBy(dy); return; }
     if (this.current === SelectScene && SelectScene.helpOpen) { SelectScene.helpScrollBy(dy); return; }
-    if (this.current === SelectScene && !SelectScene.helpOpen) {
+    if (this.current === SelectScene && !SelectScene.helpOpen && !SelectScene.archiveOpen && !SelectScene.dailyOpen) {
       SelectScene.scrollBy(dy);
     }
   }
@@ -469,6 +471,8 @@ var SelectScene = {
   introShow: null,
   introRects: null,
   dailyOpen: false,
+  archiveOpen: false,    // 个人战绩档案浮层（v0.48）
+  archiveScroll: 0,
   invite: null,          // 分享链接邀请：{ch, beat, seed, stars}
   _inviteRead: false,
   scrollY: 0,
@@ -482,6 +486,8 @@ var SelectScene = {
     this.helpScroll = 0;
     this.codexOpen = false;
     this.dailyOpen = false;
+    this.archiveOpen = false;
+    this.archiveScroll = 0;
     this.scrollY = 0;
     this.codexScroll = 0;
     if (G.AudioSys && G.AudioSys.playAsset) G.AudioSys.playAsset('menu');
@@ -536,6 +542,7 @@ var SelectScene = {
   touchStart: function (x, y) {
     if (y > 196) this._dragY = { y: y, sy: this.scrollY };
     if (this.codexOpen && y > 92 && y < Platform.H - 66) this._codexDrag = { y: y, sy: this.codexScroll };
+    if (this.archiveOpen && y > 92 && y < Platform.H - 62) this._archiveDrag = { y: y, sy: this.archiveScroll };
     if (this.helpOpen) this._helpDrag = { y: y, sy: this.helpScroll };
   },
   touchMove: function (x, y) {
@@ -551,8 +558,11 @@ var SelectScene = {
       var maxH2 = this._helpMaxScroll();
       this.helpScroll = Math.max(0, Math.min(maxH2, this._helpDrag.sy + (this._helpDrag.y - y)));
     }
+    if (this._archiveDrag) {
+      this.archiveScroll = Math.max(0, Math.min(this._archiveMaxScroll(), this._archiveDrag.sy + (this._archiveDrag.y - y)));
+    }
   },
-  touchEnd: function () { this._dragY = null; this._codexDrag = null; this._helpDrag = null; },
+  touchEnd: function () { this._dragY = null; this._codexDrag = null; this._helpDrag = null; this._archiveDrag = null; },
   scrollBy: function (dy) {
     var maxS = Math.max(0, this._contentH() - (Platform.H - 202 - 44));
     this.scrollY = Math.max(0, Math.min(maxS, this.scrollY + dy));
@@ -563,6 +573,12 @@ var SelectScene = {
   codexScrollBy: function (dy) {
     var maxC = Math.max(0, this._codexContentH() - (Platform.H - 92 - 70));
     this.codexScroll = Math.max(0, Math.min(maxC, this.codexScroll + dy));
+  },
+  archiveScrollBy: function (dy) {
+    this.archiveScroll = Math.max(0, Math.min(this._archiveMaxScroll(), this.archiveScroll + dy));
+  },
+  _archiveMaxScroll: function () {
+    return Math.max(0, (this._archiveContentH || 0) - (Platform.H - 92 - 62));
   },
   _codexContentH: function () {
     var h = 0, k;
@@ -629,24 +645,30 @@ var SelectScene = {
 
     if (this.helpOpen) { this.renderHelp(ctx); return; }
     if (this.codexOpen) { this.renderCodex(ctx); return; }
+    if (this.archiveOpen) { this.renderArchive(ctx); return; }
 
-    // 固定入口行：每日挑战 / 百年孤旅 / 图鉴·成就 / 说明（四列；窄屏靠 UI.button 自动缩字）
-    var cw4 = (W - 48 - 30) / 4;
-    var dailyBtn = UI.button(24, 142, cw4, 32, '每日挑战', { bg: '#fbbf24', color: '#2b1c00', size: 12 });
+    // 固定入口行：每日挑战 / 百年孤旅 / 图鉴·成就 / 档案 / 说明（五列；窄屏靠 UI.button 自动缩字）
+    var cw4 = (W - 48 - 40) / 5;
+    var ew = cw4 + 10;                       // 列间距 10
+    var dailyBtn = UI.button(24, 142, cw4, 32, '每日挑战', { bg: '#fbbf24', color: '#2b1c00', size: 11 });
     dailyBtn.onTap = function () { self.dailyOpen = true; };
     dailyBtn.draw(ctx); Scenes.buttons.push(dailyBtn);
-    var centBtn = UI.button(24 + (cw4 + 10), 142, cw4, 32, '百年孤旅', { bg: '#4c1d95', size: 12 });
+    var centBtn = UI.button(24 + ew, 142, cw4, 32, '百年孤旅', { bg: '#4c1d95', size: 11 });
     centBtn.onTap = function () {
       G.state = Core.startCentury();
       Scenes.go(GameScene);
     };
     centBtn.draw(ctx); Scenes.buttons.push(centBtn);
-    var codexBtn = UI.button(24 + (cw4 + 10) * 2, 142, cw4, 32, '图鉴·成就',
-      { bg: '#312e5f', size: 12 });
+    var codexBtn = UI.button(24 + ew * 2, 142, cw4, 32, '图鉴·成就',
+      { bg: '#312e5f', size: 11 });
     codexBtn.onTap = function () { self.codexOpen = true; self.codexTab = 'swan'; self.codexSel = null; };
     codexBtn.draw(ctx); Scenes.buttons.push(codexBtn);
-    var helpB2 = UI.button(24 + (cw4 + 10) * 3, 142, cw4, 32, '玩法说明',
-      { bg: C.panel2, color: C.sub, size: 12 });
+    var archBtn = UI.button(24 + ew * 3, 142, cw4, 32, '我的档案',
+      { bg: '#0e7490', size: 11 });
+    archBtn.onTap = function () { self.archiveOpen = true; self.archiveScroll = 0; };
+    archBtn.draw(ctx); Scenes.buttons.push(archBtn);
+    var helpB2 = UI.button(24 + ew * 4, 142, cw4, 32, '玩法说明',
+      { bg: C.panel2, color: C.sub, size: 11 });
     helpB2.onTap = function () { self.helpOpen = true; };
     helpB2.draw(ctx); Scenes.buttons.push(helpB2);
     var cb = this.meta.centuryBest;
@@ -869,6 +891,90 @@ var SelectScene = {
   },
   _helpMaxScroll: function () {
     return Math.max(0, this._helpContentH() - this._helpView().viewH);
+  },
+
+  // —— 我的档案（v0.48）：跨局积累，打完之后留得下的东西 ——
+  renderArchive: function (ctx) {
+    var W = Platform.W, H = Platform.H, self = this;
+    // 全页实底：档案内容密，半透明会让底层选章页文字透出来干扰阅读
+    ctx.fillStyle = C.bg1;
+    ctx.fillRect(0, 0, W, H);
+    UI.text(ctx, '我的档案', W / 2, 42, { size: 17, color: C.gold, align: 'center', bold: true });
+    var rec = this.meta.record || { plays: 0, wins: 0, bankrupt: 0, weeks: 0, bestStreak: 0, endings: {} };
+    var k, endN = 0;
+    for (k in (rec.endings || {})) endN++;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 92, W, H - 92 - 62);
+    ctx.clip();
+    var y = 100 - this.archiveScroll;
+    this._archiveContentH = 92;
+
+    if (!rec.plays) {
+      UI.lines(ctx, wrap(ctx, '还没有战绩。去时间轴挑一个时代，活过它的百年动荡，这里就会记下你的第一笔。', W - 72, 12),
+        W / 2, y + 90, 20, { size: 12, color: C.sub, align: 'center' });
+      this._archiveContentH = 300;
+    } else {
+      // 总览：五个数字卡片（两行）
+      var cards = [
+        ['总局数', String(rec.plays), C.gold],
+        ['通关', String(rec.wins || 0), '#86efac'],
+        ['破产', String(rec.bankrupt || 0), C.danger],
+        ['存活周', String(rec.weeks || 0), C.blue],
+        ['最佳连胜', String(rec.bestStreak || 0), '#c4b5fd']
+      ];
+      var cw = (W - 48 - 16) / 3, chh = 54;
+      for (var ci = 0; ci < cards.length; ci++) {
+        var col = ci % 3, rowi = Math.floor(ci / 3);
+        var cx = 24 + col * (cw + 8), cy = y + rowi * (chh + 8);
+        UI.roundRect(ctx, cx, cy, cw, chh, 8, C.panel, C.border);
+        UI.text(ctx, cards[ci][1], cx + cw / 2, cy + 22,
+          { size: 19, color: cards[ci][2], align: 'center', bold: true });
+        UI.text(ctx, cards[ci][0], cx + cw / 2, cy + 43,
+          { size: 10.5, color: C.sub, align: 'center' });
+      }
+      y += 2 * (chh + 8) + 14;
+
+      // 各章最佳
+      UI.text(ctx, '各章最佳', 24, y, { size: 12, color: C.gold, bold: true });
+      y += 22;
+      for (var ti = 0; ti < D.chapters.length; ti++) {
+        var ch = D.chapters[ti];
+        var st = this.meta.stars[ch.id] || 0, bn = this.meta.best[ch.id] || 0;
+        var starS = '';
+        for (var si = 0; si < 3; si++) starS += si < st ? '★' : '☆';
+        UI.textFit(ctx, ch.era + ' · ' + ch.name, 24, y, W - 190, { size: 11, color: C.text });
+        UI.text(ctx, starS, W - 150, y, { size: 11, color: C.gold, align: 'right' });
+        UI.text(ctx, bn ? usd(bn) : '—', W - 24, y, { size: 11, color: bn ? C.blue : C.dim, align: 'right' });
+        y += 20;
+      }
+      y += 12;
+
+      // 结局收集
+      UI.text(ctx, '结局收集 ' + endN + '/' + Object.keys(Core.ENDING_NAMES).length, 24, y,
+        { size: 12, color: C.gold, bold: true });
+      y += 22;
+      for (var eid in Core.ENDING_NAMES) {
+        var cnt = (rec.endings || {})[eid] || 0;
+        UI.textFit(ctx, (cnt ? Core.ENDING_NAMES[eid] : '？？？') + (cnt ? ' ×' + cnt : ''),
+          24, y, W - 48, { size: 11, color: cnt ? C.text : C.dim });
+        y += 19;
+      }
+      y += 8;
+      this._archiveContentH = y + this.archiveScroll;
+    }
+    ctx.restore();
+    // 滚动条
+    var view = H - 92 - 62;
+    if (this._archiveContentH > view) {
+      var barH = Math.max(30, view * view / this._archiveContentH);
+      var barY = 92 + (view - barH) * (this.archiveScroll / Math.max(1, this._archiveContentH - view));
+      UI.roundRect(ctx, W - 6, barY, 3, barH, 1.5, C.dim);
+    }
+    var close = UI.button(W / 2 - 60, H - 54, 120, 34, '关闭', { bg: '#0e7490', size: 13 });
+    close.onTap = function () { self.archiveOpen = false; };
+    close.draw(ctx); Scenes.buttons.push(close);
   },
 
   // —— 图鉴 · 成就 ——
@@ -2011,7 +2117,7 @@ var GameScene = {
   // —— 时代结算 ——
   renderSettle: function (ctx, s) {
     var W = Platform.W, H = Platform.H, ch = Core.chapter(s);
-    ctx.fillStyle = C.backdropHeavy;
+    ctx.fillStyle = C.bg1;                 // 实底：结算是全屏页，半透明会让底层交易文字透出来
     ctx.fillRect(0, 0, W, H);
     var py = 64;
     var endYear = (ch.startYear || 1926) + 6;
@@ -2086,14 +2192,26 @@ var GameScene = {
         { size: 11, color: C.blue, align: 'center' });
     }
 
-    var verdicts = [
-      '你熬过了整个时代，钱袋却没有跟着变厚。历史只奖励活下来还变强的人。',
-      '你活下来了。在这个时代，这本身就是胜利。',
-      '你不仅活了下来，资产还数倍于开局。',
-      '传奇。多年以后人们会说：有个人在这个时代赚了十倍。'
-    ];
-    UI.lines(ctx, wrap(ctx, verdicts[s.result.stars], W - 100, 12.5), W / 2, py + 402, 19,
-      { size: 12.5, color: C.text, align: 'center' });
+    // 结局叙事（v0.48）：把星级评语换成一句有画面感的"人生评语"，同一评语也出现在战绩卡
+    var un2 = this.newUnlocks || {};
+    var ending = un2.ending || Core.endingOf(s);
+    var eColor = ending.tone === 'bad' ? C.danger : ending.tone === 'gold' ? C.gold
+      : ending.tone === 'warn' ? '#fbbf24' : ending.tone === 'good' ? '#86efac' : C.sub;
+    UI.text(ctx, '【' + ending.title + '】', W / 2, py + 388,
+      { size: 13.5, color: eColor, align: 'center', bold: true });
+    UI.lines(ctx, wrap(ctx, ending.desc, W - 92, 11.5).slice(0, 2), W / 2, py + 406, 15,
+      { size: 11, color: C.sub, align: 'center' });
+    // 「第 N 局 · 比上次 ±%」：给重复游玩一个积累感
+    var rec = Core.loadAll().meta.record;
+    if (rec && rec.plays) {
+      var cmp = '';
+      if (un2.prevNw && s.result.nw > 0) {
+        var d = s.result.nw / un2.prevNw - 1;
+        cmp = ' · 比上次 ' + (d >= 0 ? '+' : '') + Math.round(d * 100) + '%';
+      }
+      UI.text(ctx, '我的第 ' + rec.plays + ' 局' + cmp, W / 2, py + 433,
+        { size: 10, color: C.dim, align: 'center' });
+    }
 
     // 主按钮：有下一章就直接推进（每日挑战是单章玩法，不串章；百年孤旅走自己的结算页）
     var bw = (W - 48 - 30) / 4;
@@ -2117,7 +2235,7 @@ var GameScene = {
     var shareQ = { ch: ch.id, beat: Math.round(s.result.nw), st: s.result.stars, seed: s.seed };
     var shareB = UI.button(24 + (bw + 10) * 2, py + 444, bw, 40, '战绩卡 ▣', { bg: '#2563eb', size: 11.5 });
     shareB.onTap = function () {
-      makeBattleCard(s, ch, beat, nwChg, idxChg, shareQ);
+      makeBattleCard(s, ch, beat, nwChg, idxChg, shareQ, (Scenes.newUnlocks || {}).ending);
     };
     shareB.draw(ctx); Scenes.buttons.push(shareB);
     // Mock 模式（USE_REAL_AD=false）下没有真广告，文案不能写"看广告"，否则玩家以为是坏按钮
@@ -2190,7 +2308,7 @@ function dateText(s) {
 function self2Sel(id) { return GameScene.sel === id; }
 
 // 结算战绩卡：离屏合成 430×760 PNG，浏览器直接下载 / 微信转临时文件走分享
-function makeBattleCard(s, ch, beat, nwChg, idxChg, shareQ) {
+function makeBattleCard(s, ch, beat, nwChg, idxChg, shareQ, ending) {
   var CW2 = 430, CH3 = 760;
   var cv = Platform.createOffscreen(CW2, CH3);
   if (!cv || !cv.getContext) return;
@@ -2246,6 +2364,9 @@ function makeBattleCard(s, ch, beat, nwChg, idxChg, shareQ) {
     }
     ry2 += evN2.length * 18 + 10;
   }
+  var cardEnd = ending || Core.endingOf(s);
+  UI.text(x2, '【' + cardEnd.title + '】', CW2 / 2, CH3 - 88,
+    { size: 13, color: cardEnd.tone === 'bad' ? '#f87171' : cardEnd.tone === 'gold' ? '#fbbf24' : '#d7e0f2', align: 'center', bold: true });
   UI.text(x2, '你能在华尔街活过几个时代？', CW2 / 2, CH3 - 64, { size: 12.5, color: '#d7e0f2', align: 'center', bold: true });
   UI.text(x2, '黑天鹅世纪 · 华尔街百年生存模拟', CW2 / 2, CH3 - 40, { size: 10.5, color: '#5a6c92', align: 'center' });
   var share = null;
