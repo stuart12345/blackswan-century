@@ -1246,6 +1246,15 @@ var GameScene = {
       { bg: C.panel2, color: C.sub, size: 12 });
     thB3.onTap = function () { toggleTheme(); };
     thB3.draw(ctx); Scenes.buttons.push(thB3);
+    // 主菜单（v0.49）：局内此前只能等结算/破产才能回时间轴，中途无法退出。
+    // 存档当前局再返回，选章页「▶ 继续」能接上，进度不丢。
+    var menuB = UI.button(W - 262, 10, 44, 26, '菜单', { bg: C.panel2, color: C.sub, size: 11 });
+    menuB.onTap = function () {
+      if (s.phase === 'play') Core.save(s);
+      G.state = null;
+      Scenes.go(SelectScene);
+    };
+    menuB.draw(ctx); Scenes.buttons.push(menuB);
 
     // ===== 净值行 =====
     var ri = Core.riskInfo(s);
