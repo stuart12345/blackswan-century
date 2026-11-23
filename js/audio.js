@@ -109,6 +109,7 @@ var AudioSys = {
   bgMuted: false, sfxMuted: false, dark: false,
   bgVolume: 0.5, sfxVolume: 0.9,
   started: false, step: 0, nextTime: 0, timer: null,
+  _xfadeTimer: null,                      // 程序化→录音交叉淡化的收尾定时器（v103 首屏音频）
   ksCache: {}, ksCount: 0,
 
   // ---------- 资产 BGM（CC0 真实录音；曲目可切换；失败自动回退程序化钢琴三重奏） ----------
@@ -178,13 +179,12 @@ var AudioSys = {
           A.loading = null;
           A.cache.push(id);
           while (A.cache.length > 3) { delete A.loaded[A.cache.shift()]; }   // LRU 3 首
-          // 若场景正想要这首（或换曲待接管）→ 无缝切换
+          // 若场景正想要这首（或换曲待接管）→ 无缝接管。
+          // v103：程序化的让位统一收进 _startAsset → _yieldProcedural（交叉淡化），这里不再硬停调度器。
           var wantName = A.want || 'menu';
           if (id === self.keyOf(wantName)) {
-            var wasProcedural = !A.active;
             if (A.active) self._stopAsset();
             self._startAsset(wantName);
-            if (wasProcedural && self.timer) { clearInterval(self.timer); self.timer = null; self.started = false; }
           }
         })
         .catch(function (e) {
@@ -345,9 +345,38 @@ var AudioSys = {
       A.active = name;
       A.activeKey = key;
       this.prefetchRest();                 // 播稳之后把其余曲目悄悄拉下来
-      // 程序化调度器若在跑则让位
-      if (this.timer) { clearInterval(this.timer); this.timer = null; this.started = false; }
+      // 首屏程序化三重奏正在响 → 交叉淡化让位，不硬掐（v103）
+      this._yieldProcedural();
     } catch (e) { this.startBgm(); }
+  },
+
+  // v103 首屏音频：录音接管时，程序化三重奏淡出、录音淡入（1.1 秒），不再瞬间掐断造成"咔"一声静音。
+  // 淡出走程序化总线的 bgBus.gain，不碰 bgGain（静音闸）与 Asset.vol（录音自身音量），互不干扰。
+  // 收尾时才清调度器：这期间 schedule 仍在排音符，但被淡到静音，所以听感连续。
+  _yieldProcedural: function () {
+    var self = this, A = this.Asset;
+    if (!this.timer || !this.ctx) return;  // 程序化没在跑，无需让位
+    var t = this.ctx.currentTime;
+    var XF = 1.1;
+    try {
+      this.bgBus.gain.cancelScheduledValues(t);
+      this.bgBus.gain.setValueAtTime(this.bgBus.gain.value, t);
+      this.bgBus.gain.linearRampToValueAtTime(0.0001, t + XF);
+      if (A.vol) {
+        A.vol.gain.cancelScheduledValues(t);
+        A.vol.gain.setValueAtTime(0.0001, t);
+        A.vol.gain.linearRampToValueAtTime(this.dark ? 0.55 : 0.78, t + XF);
+      }
+    } catch (e) { /* 淡化设置失败：立即让位 */ }
+    if (this._xfadeTimer) clearTimeout(this._xfadeTimer);
+    var sched = this.timer;
+    this._xfadeTimer = setTimeout(function () {
+      self._xfadeTimer = null;
+      clearInterval(sched);
+      if (self.timer === sched) { self.timer = null; self.started = false; }
+      // 复位程序化总线，供日后加载失败 / 手动回退时再用
+      try { self.bgBus.gain.setValueAtTime(1, self.ctx.currentTime); } catch (e) {}
+    }, (XF + 0.15) * 1000);
   },
 
   init: function () {
@@ -604,18 +633,20 @@ var AudioSys = {
     this._loadAssets();
     var self = this, A = this.Asset;
     if (A.mode === 'web') {
-      // 轮询目标曲解码（最多 4 秒，每刻读最新 want），成功切资产，超时回退程序化
+      // v103 首屏音频：不等 4.88MB 录音解码，手势解锁瞬间就起程序化三重奏，
+      // 填掉"点进来 → 音乐响"之间最长 4 秒的静音冷场（正好盖住 30 秒引导的开场）。
+      // 目标曲解码完成后，loadTrack 回调 / 下方轮询会接管并交叉淡化（见 _yieldProcedural）。
+      this.startBgm();
       var waited = 0;
       var poll = setInterval(function () {
         waited += 100;
         var w = A.want || 'menu';
         var wk = self.keyOf(w);
-        if (A.loaded[wk]) {
+        if (A.loaded[wk] && A.active !== w) {
           clearInterval(poll);
-          if (A.active !== w) self._startAsset(w);
-        } else if (waited > 4000) {
-          clearInterval(poll);
-          if (!A.active) self.startBgm();
+          self._startAsset(w);
+        } else if (waited > 20000) {
+          clearInterval(poll);      // 录音始终加载不出：程序化继续放，不再轮询
         }
       }, 100);
     } else {
