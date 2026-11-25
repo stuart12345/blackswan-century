@@ -2130,21 +2130,21 @@ var GameScene = {
     ctx.fillRect(0, 0, W, H);
     var py = 64;
     var endYear = (ch.startYear || 1926) + 6;
-    UI.text(ctx, '时代终点 · ' + (ch.startYear || 1926) + '.01 — ' + endYear + '.12', W / 2, py + 30,
-      { size: 15, color: C.sub, align: 'center' });
+    UI.text(ctx, '时代终点 · ' + (ch.startYear || 1926) + '.01 — ' + endYear + '.12', W / 2, py + 28,
+      { size: 14, color: C.sub, align: 'center' });
 
     var starTxt = '';
     for (var i = 0; i < 3; i++) starTxt += i < s.result.stars ? '★' : '☆';
-    UI.text(ctx, starTxt, W / 2, py + 84, { size: 40, color: C.gold, align: 'center', bold: true });
+    UI.text(ctx, starTxt, W / 2, py + 74, { size: 34, color: C.gold, align: 'center', bold: true });
 
-    UI.text(ctx, '期末净值 ' + usd(s.result.nw), W / 2, py + 130, { size: 20, color: C.gold, align: 'center', bold: true });
+    UI.text(ctx, '期末净值 ' + usd(s.result.nw), W / 2, py + 114, { size: 19, color: C.gold, align: 'center', bold: true });
     var idxChg = s.result.idx / 100 - 1;
     var nwChg = s.result.nw / ch.startCash - 1;
     var beat = nwChg > idxChg;
-    UI.text(ctx, '同期' + ch.indexName + ' ' + pctStr(idxChg), W / 2, py + 156,
-      { size: 12, color: chgColor(idxChg), align: 'center' });
+    UI.text(ctx, '同期' + ch.indexName + ' ' + pctStr(idxChg), W / 2, py + 140,
+      { size: 11.5, color: chgColor(idxChg), align: 'center' });
     UI.text(ctx, (beat ? '【跑赢大盘】' : '【跑输大盘】') + pctStr(nwChg) + ' vs ' + pctStr(idxChg),
-      W / 2, py + 180, { size: 13, color: beat ? C.gold : C.dim, align: 'center', bold: true });
+      W / 2, py + 163, { size: 12.5, color: beat ? C.gold : C.dim, align: 'center', bold: true });
 
     // 复盘：最赚/最亏一笔 + 一句话诊断
     var best = null, worst = null, ti6;
@@ -2170,35 +2170,57 @@ var GameScene = {
       best || worst ? '最赚 ' + (best ? '+' + usd(best.pnl) + '（' + tName(best) + '）' : '—') +
         ' · 最亏 ' + (worst ? usd(worst.pnl) + '（' + tName(worst) + '）' : '—') : null
     ].filter(Boolean);
-    UI.lines(ctx, stats, W / 2, py + 200, 18, { size: 11.5, color: C.sub, align: 'center' });
-    UI.lines(ctx, wrap(ctx, why, W - 70, 10.5).slice(0, 2), W / 2, py + 200 + stats.length * 18 + 4, 14,
-      { size: 10.5, color: C.dim, align: 'center' });
+    // 以下全部用「链式 y」：每块 y = 上一块实际底部 + 间距。
+    // 旧版是死 y（大事记 py+276 / 曲线 py+302 / 成就 py+358…），一旦某块内容变长（9 只黑天鹅、
+    // 4 成就 5 图鉴）就互相压盖。链式布局让内容量变化时各块自动让位，杜绝重叠。
+    var yy = py + 188;
+    UI.lines(ctx, stats, W / 2, yy, 17, { size: 11, color: C.sub, align: 'center' });
+    yy += stats.length * 17 + 5;
 
-    // 本局大事记（亲历的黑天鹅）
+    var whyLines = wrap(ctx, why, W - 70, 10.5).slice(0, 2);
+    UI.lines(ctx, whyLines, W / 2, yy, 14, { size: 10.5, color: C.dim, align: 'center' });
+    yy += whyLines.length * 14 + 6;
+
+    // 本局大事记（亲历的黑天鹅）：最多两行，放得下的名字全列，超出写「等 N 只」
     var evNames = [];
     for (var sw2 = 0; sw2 < s.stats.swans.length; sw2++) {
       var swId = s.stats.swans[sw2];
       evNames.push(D.codex[swId] ? D.codex[swId].title : swId);
     }
     if (evNames.length) {
-      var evLines = wrap(ctx, '大事记：' + evNames.join('、'), W - 80, 10);
-      UI.lines(ctx, evLines.slice(0, 1), W / 2, py + 276, 14, { size: 10, color: C.dim, align: 'center' });
+      var evFull = '大事记（' + evNames.length + '）：' + evNames.join('、');
+      var evLines = wrap(ctx, evFull, W - 80, 10).slice(0, 2);
+      if (evLines.length === 2 && evLines[1].indexOf('…') < 0) evLines[1] = evLines[1].replace(/[、]?$/, '…');
+      UI.lines(ctx, evLines, W / 2, yy, 14, { size: 10, color: C.dim, align: 'center' });
+      yy += evLines.length * 14 + 8;
     }
 
     // 净值旅程曲线（起点虚线 = 开局本金）
     var eqArr = [];
     for (var ei = 0; ei < s.eqHist.length; ei += Math.max(1, Math.floor(s.eqHist.length / 120))) eqArr.push(s.eqHist[ei].eq);
     if (eqArr[eqArr.length - 1] !== s.eqHist[s.eqHist.length - 1].eq) eqArr.push(s.eqHist[s.eqHist.length - 1].eq);
-    UI.text(ctx, '净值旅程', 32, py + 298, { size: 10.5, color: C.dim });
-    Chart.line(ctx, 32, py + 302, W - 64, 46, eqArr, C.gold, { base: ch.startCash });
+    UI.text(ctx, '净值旅程', 32, yy, { size: 10.5, color: C.dim });
+    yy += 3;
+    Chart.line(ctx, 32, yy, W - 64, 36, eqArr, C.gold, { base: ch.startCash });
+    yy += 36 + 7;
 
-    // 解锁播报（成就 / 图鉴）
+    // 解锁播报（成就 / 图鉴）：显示数量 + 前 3 项，多了写「等 N 项」——
+    // 旧版把所有名字单行 textFit 硬塞，长列表只剩「…被遗忘的…」，等于什么都没告诉玩家。
     var un = this.newUnlocks;
     if (un && (un.ach.length || un.codex.length)) {
-      if (un.ach.length) UI.textFit(ctx, '★ 新成就：' + un.ach.join('、'), W / 2, py + 358, W - 40,
-        { size: 11, color: C.gold, align: 'center', bold: true });
-      if (un.codex.length) UI.textFit(ctx, '◈ 新图鉴：' + un.codex.join('、'), W / 2, py + 376, W - 40,
-        { size: 11, color: C.blue, align: 'center' });
+      if (un.ach.length) {
+        var a3 = un.ach.slice(0, 3).join('、') + (un.ach.length > 3 ? ' 等 ' + un.ach.length + ' 项' : '');
+        UI.textFit(ctx, '★ 新成就 ×' + un.ach.length + '：' + a3, W / 2, yy, W - 36,
+          { size: 10.5, color: C.gold, align: 'center', bold: true });
+        yy += 16;
+      }
+      if (un.codex.length) {
+        var c3 = un.codex.slice(0, 3).join('、') + (un.codex.length > 3 ? ' 等 ' + un.codex.length + ' 项' : '');
+        UI.textFit(ctx, '◈ 新图鉴 ×' + un.codex.length + '：' + c3, W / 2, yy, W - 36,
+          { size: 10.5, color: C.blue, align: 'center' });
+        yy += 16;
+      }
+      yy += 2;
     }
 
     // 结局叙事（v0.48）：把星级评语换成一句有画面感的"人生评语"，同一评语也出现在战绩卡
@@ -2206,10 +2228,12 @@ var GameScene = {
     var ending = un2.ending || Core.endingOf(s);
     var eColor = ending.tone === 'bad' ? C.danger : ending.tone === 'gold' ? C.gold
       : ending.tone === 'warn' ? '#fbbf24' : ending.tone === 'good' ? '#86efac' : C.sub;
-    UI.text(ctx, '【' + ending.title + '】', W / 2, py + 388,
+    UI.text(ctx, '【' + ending.title + '】', W / 2, yy,
       { size: 13.5, color: eColor, align: 'center', bold: true });
-    UI.lines(ctx, wrap(ctx, ending.desc, W - 92, 11.5).slice(0, 2), W / 2, py + 406, 15,
-      { size: 11, color: C.sub, align: 'center' });
+    yy += 16;
+    var descLines = wrap(ctx, ending.desc, W - 92, 11.5).slice(0, 2);
+    UI.lines(ctx, descLines, W / 2, yy, 14, { size: 10.5, color: C.sub, align: 'center' });
+    yy += descLines.length * 14 + 3;
     // 「第 N 局 · 比上次 ±%」：给重复游玩一个积累感
     var rec = Core.loadAll().meta.record;
     if (rec && rec.plays) {
@@ -2218,7 +2242,8 @@ var GameScene = {
         var d = s.result.nw / un2.prevNw - 1;
         cmp = ' · 比上次 ' + (d >= 0 ? '+' : '') + Math.round(d * 100) + '%';
       }
-      UI.text(ctx, '我的第 ' + rec.plays + ' 局' + cmp, W / 2, py + 433,
+      // 钳制在按钮行（py+444）上方，内容再多也不许压到按钮上
+      UI.text(ctx, '我的第 ' + rec.plays + ' 局' + cmp, W / 2, Math.min(yy, py + 430),
         { size: 10, color: C.dim, align: 'center' });
     }
 
