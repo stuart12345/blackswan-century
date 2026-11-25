@@ -980,7 +980,7 @@ var SelectScene = {
   // —— 图鉴 · 成就 ——
   renderCodex: function (ctx) {
     var W = Platform.W, H = Platform.H, self = this;
-    ctx.fillStyle = C.backdropHeavy;
+    ctx.fillStyle = C.bg1;                 // 全页实底：半透明会透出底层选章页文字，干扰阅读（v0.51）
     ctx.fillRect(0, 0, W, H);
     var codexN = 0, keys = Object.keys(D.codex), k;
     for (k in this.meta.codex) codexN++;
@@ -1013,20 +1013,22 @@ var SelectScene = {
           UI.roundRect(ctx, 24, y, W - 48, rowH - 6, 8, on ? C.panel : 'rgba(0,0,0,0.18)', on ? C.border : null);
           if (on) {
             UI.text(ctx, c.era + ' · ' + c.title, 38, y + 16, { size: 12, color: C.text, bold: true });
-            UI.text(ctx, '已解锁', W - 38, y + 16, { size: 10, color: C.green, align: 'right' });
+            UI.text(ctx, '已解锁', W - 38, y + 16, { size: 10, color: '#86efac', align: 'right' });
             if (this.codexSel === key) {
               var tl = wrap(ctx, c.truth, W - 76, 10);
               UI.lines(ctx, tl.slice(0, 4), 38, y + 38, 14.5, { size: 10, color: C.sub });
               UI.textFit(ctx, '◈ ' + c.lesson, 38, y + 38 + Math.min(tl.length, 4) * 14.5 + 6, W - 76,
                 { size: 10, color: C.gold, bold: true });
             }
-            var hit = UI.button(24, y, W - 48, rowH - 6, '', {});
+            // 纯命中区：只登记不绘制。v0.50 之前这里 hit.draw() 用 UI.button 的默认蓝底
+            // 把刚画好的条目文字整块盖住——7 个已解锁图鉴变成 7 条纯蓝长条（委托人截图）。
+            var hit = UI.button(24, y, W - 48, rowH - 6);
             hit.onTap = (function (kk) {
               return function () {
                 SelectScene.codexSel = SelectScene.codexSel === kk ? null : kk;
               };
             })(key);
-            hit.draw(ctx); Scenes.buttons.push(hit);
+            Scenes.buttons.push(hit);
           } else {
             UI.text(ctx, '??? · 未解锁', 38, y + 16, { size: 12, color: C.dim, bold: true });
             UI.text(ctx, c.era + '年代', W - 38, y + 16, { size: 10, color: C.dim, align: 'right' });
