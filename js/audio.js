@@ -116,7 +116,7 @@ var AudioSys = {
   // 曲目歌单（game 槽位可切换；menu 固定拉格泰姆）。解码按需 + LRU 缓存 3 首，省内存
   Asset: { want: null, loaded: {}, cache: [], triedLoad: false, node: null, filter: null, vol: null,
            inner: null, active: null, activeKey: null, mode: null, trackIdx: 0, loading: null, failed: {}, noAudio: false,
-           raw: {}, pfStarted: false,
+           raw: {}, pfStarted: false, cacheMax: 4, pfDecoded: 0, pfPending: {},
            tracks: [
              { id: 'bgm_game', name: '电子舞曲', file: 'audio/bgm_game.mp3?v=4' },
              { id: 'bgm_t2', name: '复古电音', file: 'audio/bgm_t2.mp3' },
@@ -163,7 +163,28 @@ var AudioSys = {
     A.loading = id;                           // 面板据此显示"载入中…"
     delete A.failed[id];
     var attempt = 0;
+    // 解码成功后的收口（预解码等待路径与常规路径共用）
+    var finish = function (buf) {
+      A.loaded[id] = buf;
+      A.loading = null;
+      A.cache.push(id);
+      while (A.cache.length > A.cacheMax) { delete A.loaded[A.cache.shift()]; }   // LRU 上限见 Asset.cacheMax
+      // 若场景正想要这首（或换曲待接管）→ 无缝接管。
+      // v103：程序化的让位统一收进 _startAsset → _yieldProcedural（交叉淡化），这里不再硬停调度器。
+      var wantName = A.want || 'menu';
+      if (id === self.keyOf(wantName)) {
+        if (A.active) self._stopAsset();
+        self._startAsset(wantName);
+      }
+    };
     var run = function () {
+      // 正在后台预解码这首？直接等它的结果，别重复下载+解码一份（省 CPU 和内存峰值）
+      if (attempt === 0 && A.pfPending && A.pfPending[id]) {
+        return A.pfPending[id].then(function (buf) {
+          if (buf) finish(buf);               // 预解码成功，直接用
+          else { attempt = 1; return run(); } // 失败：按重试路径现拉一次（attempt=1 跳过 pfPending）
+        });
+      }
       // 预取好的原始字节优先（省掉二次下载）；data: 内嵌曲走 atob，
       // 因为 Safari/WKWebView（含 iOS 微信）不支持 fetch('data:...')，会直接抛错。
       var bytes = (attempt === 0 && A.raw && A.raw[id])
@@ -174,19 +195,7 @@ var AudioSys = {
           if (A.raw) delete A.raw[id];        // decodeAudioData 会独占这块内存，缓存用完即弃
           return self.ctx.decodeAudioData(ab);
         })
-        .then(function (buf) {
-          A.loaded[id] = buf;
-          A.loading = null;
-          A.cache.push(id);
-          while (A.cache.length > 3) { delete A.loaded[A.cache.shift()]; }   // LRU 3 首
-          // 若场景正想要这首（或换曲待接管）→ 无缝接管。
-          // v103：程序化的让位统一收进 _startAsset → _yieldProcedural（交叉淡化），这里不再硬停调度器。
-          var wantName = A.want || 'menu';
-          if (id === self.keyOf(wantName)) {
-            if (A.active) self._stopAsset();
-            self._startAsset(wantName);
-          }
-        })
+        .then(finish)
         .catch(function (e) {
           if (attempt === 0) {                // 网络抖动 / 解码偶发失败 → 等 0.9 秒重试一次
             attempt = 1;
@@ -200,9 +209,10 @@ var AudioSys = {
     run();
   },
 
-  // 后台预取其余曲目（只存原始字节，不提前解码——解码后一首就是几十 MB）。
-  // 线上 mp3 每首 1–5MB，慢网下切歌要等十几秒；预取让面板里点选几乎即时。
-  // 省流模式、离线单文件（data: URI）跳过。
+  // 后台预解码其余曲目（v0.53：从"只存原始字节"升级为"下载+解码入缓存"）。
+  // 旧版只预取字节，点歌时 decodeAudioData 才当场做——几 MB 的 mp3 展开成 PCM 要 1–3 秒，
+  // 这就是"切换后载入太慢"的真正瓶颈。改为后台解码好，切歌时 A.loaded[id] 已在，即点即播。
+  // 内存保护：串行解码（不并发，避免峰值翻倍）、低内存设备减量、LRU 上限、省流/离线跳过。
   prefetchRest: function () {
     var self = this, A = this.Asset;
     if (A.mode !== 'web' || A.pfStarted) return;
@@ -210,21 +220,50 @@ var AudioSys = {
       var c = navigator.connection;
       if (c && (c.saveData || c.effectiveType === 'slow-2g' || c.effectiveType === '2g')) return;
     } catch (e) { /* 老浏览器没有 connection */ }
+    // navigator.deviceMemory 仅 Chromium 系有（GB）；无此属性按 8GB 正常设备处理。
+    // 一首解码后 PCM 约 25–60MB，低端机只多解码 1 首，避免把页面撑爆。
+    var mem = 8;
+    try { if (navigator.deviceMemory && navigator.deviceMemory <= 4) mem = 2; } catch (e) {}
+    A.cacheMax = mem <= 2 ? 2 : 4;
     A.pfStarted = true;
     A.raw = A.raw || {};
-    var i = 0;
+    var budget = A.cacheMax - 1;              // 留 1 个槽给当前曲，其余留给预解码
+    var i = 0, decoded = 0;
     var next = function () {
+      if (decoded >= budget) return;
       while (i < A.tracks.length) {
         var t = A.tracks[i++];
         if (t.id === self.curTrack().id || A.loaded[t.id] || A.raw[t.id] || /^data:/.test(t.file)) continue;
-        var tid = t.id, tfile = t.file;                    // 闭包捕获，别让 6 秒后的下一轮改写 t
-        fetch(tfile).then(function (r) { return r.arrayBuffer(); })
-          .then(function (ab) { A.raw[tid] = ab; })
-          .catch(function () { /* 预取失败无所谓，真点的时候会再拉一次 */ });
-        return setTimeout(next, 6000);        // 一首接一首，别跟正在播的那首抢带宽
+        var tid = t.id, tfile = t.file;        // 闭包捕获，别让下一轮改写
+        // 先拿字节（可能已在 raw 里），再解码。解码结果直接入 A.loaded，
+        // 后续 switchTrack 看到 loaded 就跳过 loadTrack，实现即点即播。
+        var bytes = A.raw[tid] ? Promise.resolve(A.raw[tid]) : readBytes(tfile);
+        var p = bytes.then(function (ab) {
+          A.raw[tid] = ab;
+          return self.ctx.decodeAudioData(ab);
+        }).then(function (buf) {
+          delete A.raw[tid];                  // 解码后字节可丢，省内存
+          delete A.pfPending[tid];
+          if (!A.loaded[tid]) {               // loadTrack 可能已抢先解码好，别重复入队
+            A.loaded[tid] = buf;
+            A.cache.push(tid);
+            while (A.cache.length > A.cacheMax) { delete A.loaded[A.cache.shift()]; }
+          }
+          A.pfDecoded++;
+          decoded++;
+          setTimeout(next, 1200);             // 串行：解完一首缓 1.2 秒再解下一首，避免主线程卡顿
+          return buf;
+        }).catch(function () {
+          delete A.pfPending[tid];
+          decoded++;                          // 失败不重试，真点的时候 loadTrack 会再拉一次
+          setTimeout(next, 1200);
+          return null;                        // 不 throw：无人等待时不产生 unhandled rejection
+        });
+        A.pfPending[tid] = p;                 // loadTrack 若同时被点，等这个 promise 而非重复解码
+        return;                               // 一次只解一首
       }
     };
-    setTimeout(next, 8000);                   // 首曲先播稳
+    setTimeout(next, 8000);                   // 首曲先播稳再开始预解码
   },
 
   playAsset: function (name) {
