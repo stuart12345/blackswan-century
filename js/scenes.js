@@ -219,7 +219,10 @@ var Scenes = {
         }
       }
     }
-    if (this.current === SelectScene && !SelectScene.codexOpen && !SelectScene.helpOpen &&
+    // 章节简介热区必须限制在滚动列表的可见区内（y≥202），与 render 的 clip rect 一致。
+    // v0.52 之前漏了下限：列表滚动后 introRects 的 y=202-scrollY 会上移，整块盖住
+    // y=142 的固定按钮行——点「每日挑战/图鉴/档案」全变成弹 c1 章节说明。
+    if (this.current === SelectScene && y >= 202 && !SelectScene.codexOpen && !SelectScene.helpOpen &&
         !SelectScene.archiveOpen && !SelectScene.dailyOpen && !SelectScene.invite &&
         !SelectScene.introShow && SelectScene.introRects) {
       for (var ir = 0; ir < SelectScene.introRects.length; ir++) {
